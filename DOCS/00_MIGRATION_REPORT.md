@@ -1,6 +1,6 @@
 # OpsGraph AI — Phase Migration Report
-**Document Status:** Finalized (Phase 4 Stabilization Complete)  
-**Reporting Phase:** Phase 4: Evidence Grounding Layer  
+**Document Status:** Finalized (Phase 5 Complete)  
+**Reporting Phase:** Phase 5: Enterprise Knowledge Layer  
 **Execution Date:** 2026-07-08  
 **Lead Engineer:** Antigravity (AI Coding Assistant)  
 
@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-Phase 4 (Evidence Grounding Layer) of the OpsGraph AI migration is complete and stabilized. We designed, implemented, and verified the deterministic Evidence Grounding Layer. This layer normalizes diagnostic tool observations into canonical `Evidence` structures, aggregates multiple telemetry streams, performs de-duplication with SHA-256 content hashing, evaluates heuristic confidence scores/bands across explicit components, and packages validated timeline items into an immutable `EvidenceBundle`. All evaluations are isolated from LLMs and routing. The full test suite runs successfully with 41 passing tests.
+Phase 5 (Enterprise Knowledge Layer) of the OpsGraph AI migration is complete and verified. We built the complete Enterprise Knowledge Layer implementing loader, normalizer, chunker, embedding, vector store (Qdrant), hybrid search, rerank, and cache services. All schemas are strictly typed and immutable, using frozen Pydantic models. Vector search is offline-capable with local memory fallback. Reranking leverages FlashRank with a local Jaccard word-overlap fallback. The full test suite runs successfully with 49 passing tests.
 
 ---
 
@@ -17,49 +17,40 @@ Phase 4 (Evidence Grounding Layer) of the OpsGraph AI migration is complete and 
 All file paths listed below are relative to the target codebase root `opsgraph-ai/`.
 
 ### 2.1 Files Created
-*   `[NEW]` [app/services/evidence/identity.py](../opsgraph-ai/app/services/evidence/identity.py) - Utilities generating deterministic IDs and content SHA-256 hashes.
-*   `[NEW]` [app/services/evidence/normalizer.py](../opsgraph-ai/app/services/evidence/normalizer.py) - Converts tool responses to standard Pydantic `Evidence` records.
-*   `[NEW]` [app/services/evidence/aggregator.py](../opsgraph-ai/app/services/evidence/aggregator.py) - Aggregates multiple evidence collections.
-*   `[NEW]` [app/services/evidence/deduplicator.py](../opsgraph-ai/app/services/evidence/deduplicator.py) - Merges matching observations and accumulates metadata.
-*   `[NEW]` [app/services/evidence/confidence.py](../opsgraph-ai/app/services/evidence/confidence.py) - Assigns confidence scoring bands (LOW, MEDIUM, HIGH) over structured components.
-*   `[NEW]` [app/services/evidence/timeline.py](../opsgraph-ai/app/services/evidence/timeline.py) - Builds chronologically sequenced timelines using stable index sorting.
-*   `[NEW]` [app/services/evidence/packager.py](../opsgraph-ai/app/services/evidence/packager.py) - Packages validated items into an immutable `EvidenceBundle`.
-*   `[NEW]` [app/services/evidence/query.py](../opsgraph-ai/app/services/evidence/query.py) - Search and filter APIs on top of `EvidenceBundle`.
-*   `[NEW]` [tests/unit/test_evidence_grounding.py](../opsgraph-ai/tests/unit/test_evidence_grounding.py) - Grounding validations, normalizers, deduplications, and rejections.
+*   `[NEW]` [app/schemas/knowledge.py](../opsgraph-ai/app/schemas/knowledge.py) - Frozen Pydantic schemas for `KnowledgeDocument`, `KnowledgeChunk`, and `KnowledgeBundle`.
+*   `[NEW]` [app/services/knowledge/base_embedding.py](../opsgraph-ai/app/services/knowledge/base_embedding.py) - Decoupled embedding interfaces and deterministic Mock generator.
+*   `[NEW]` [app/services/knowledge/vector_store_base.py](../opsgraph-ai/app/services/knowledge/vector_store_base.py) - Abstract vector store adapter interface.
+*   `[NEW]` [app/services/knowledge/qdrant_adapter.py](../opsgraph-ai/app/services/knowledge/qdrant_adapter.py) - Qdrant adapter with transparent UUID mapping and local in-memory fallback.
+*   `[NEW]` [app/services/knowledge/loader.py](../opsgraph-ai/app/services/knowledge/loader.py) - Yaml front-matter loader parsing operational guides and runbooks.
+*   `[NEW]` [app/services/knowledge/chunker.py](../opsgraph-ai/app/services/knowledge/chunker.py) - Heading-aware structural splitted chunker.
+*   `[NEW]` [app/services/knowledge/reranker.py](../opsgraph-ai/app/services/knowledge/reranker.py) - FlashRank reranker with local Jaccard fallback.
+*   `[NEW]` [app/services/knowledge/cache.py](../opsgraph-ai/app/services/knowledge/cache.py) - In-memory embedding and search result cacher.
+*   `[NEW]` [app/services/knowledge/retriever.py](../opsgraph-ai/app/services/knowledge/retriever.py) - Coordinator executing hybrid search with evidence filters.
+*   `[NEW]` [app/services/knowledge/__init__.py](../opsgraph-ai/app/services/knowledge/__init__.py) - Package exports.
+*   `[NEW]` [PROJECT_CONTEXT/KNOWLEDGE_LAYER_ARCHITECTURE.md](../opsgraph-ai/PROJECT_CONTEXT/KNOWLEDGE_LAYER_ARCHITECTURE.md) - Design documentation of RAG workflows and contracts.
+*   `[NEW]` [tests/unit/test_knowledge_layer.py](../opsgraph-ai/tests/unit/test_knowledge_layer.py) - Ingestion, chunking, filters, and retriever test suites.
 
 ### 2.2 Files Modified
-*   `[MODIFY]` [app/schemas/evidence.py](../opsgraph-ai/app/schemas/evidence.py) - Added Pydantic model schemas for `ConfidenceComponents`, `ConfidenceSummary` and `EvidenceBundle`, configured as frozen.
-*   `[MODIFY]` [app/schemas/__init__.py](../opsgraph-ai/app/schemas/__init__.py) - Exported the new schema models.
-*   `[MODIFY]` [app/services/evidence/validator.py](../opsgraph-ai/app/services/evidence/validator.py) - Implemented `validate_evidence()` checking scenario, incident, and topology boundaries.
-*   `[MODIFY]` [app/services/evidence/__init__.py](../opsgraph-ai/app/services/evidence/__init__.py) - Package exports updated to expose the 8 new services.
+*   `[MODIFY]` [app/schemas/__init__.py](../opsgraph-ai/app/schemas/__init__.py) - Exported knowledge schemas.
+*   `[MODIFY]` [requirements.txt](../opsgraph-ai/requirements.txt) - Cleaned up compile-only vertexai/nemoguardrails/ragas packages to support Python 3.14 on Windows sandbox.
 
 ---
 
-## 3. Evidence Grounding API & Package Structures
+## 3. Knowledge Layer Components & Flow
 
-The layer implements the following deterministic sub-responsibilities:
+The Knowledge Layer implements the following RAG sub-responsibilities:
 
-### 3.1 Normalization & SHA-256
-Converts log, metric, trace, deployment, topology, and active incident context outputs into canonical Pydantic `Evidence` records. Every item contains a SHA-256 content signature and deterministic identifier. SHA-256 replaced MD5 to provide a stronger, modern hashing standard for cryptographic content integrity verification.
+### 3.1 loader & normalizer
+Loads Markdown documents and extracts Yaml front matter containing document ID, tags, title, version, and type. It compiles it into a structured `KnowledgeDocument`.
 
-### 3.2 Immutability Enforcement
-All evidence schemas and bundles in [app/schemas/evidence.py](../opsgraph-ai/app/schemas/evidence.py) enforce strict Pydantic immutability with `model_config = {"frozen": True}`. Additionally, the collection fields `evidence_list` and `timeline` in `EvidenceBundle` are typed as `tuple[Evidence, ...]` instead of `list[Evidence]`. This blocks in-place array modifications (e.g. index assignments), guaranteeing absolute mutability protection at runtime.
+### 3.2 Heading-Aware Chunker
+Partitions documents based on markdown structural headings (like `# Symptoms`, `# Investigation Steps`), ensuring section context is preserved. Chunks inherit parent metadata.
 
-### 3.3 Explicit Confidence Components
-Confidence calculations are separated into structured components in `ConfidenceComponents`:
-*   *Source Reliability* (data accuracy metrics)
-*   *Cross-Source Agreement* (consensus across telemetry streams)
-*   *Timeline Consistency* (symptom onset proximity)
-*   *Topology Consistency* (service mesh registration validity)
-*   *Evidence Coverage* (ratio of reported service metrics gathered)
-*   *Deployment Consistency* (preceding deployment event tracking)
-*   *Observation Completeness* (telemetry type checklist)
-*   *Contradictions* (conflicting message statuses)
+### 3.3 Vector Store UUID Adapter
+Encapsulates Qdrant Client (in-memory mode for offline unit testing). Since Qdrant enforces string IDs to be valid UUIDs, the adapter implements a deterministic `uuid.uuid5` generator mapping chunk strings, storing original IDs inside payload maps.
 
-These components roll up into the overall confidence score, band, and reasons without using guessing or LLM reasoning.
-
-### 3.4 Stable Timeline Sequencing
-The timeline builder in [app/services/evidence/timeline.py](../opsgraph-ai/app/services/evidence/timeline.py) sorts items using a two-element sorting key `(timestamp, original_index)`. If multiple telemetry events share the exact same timestamp, the timeline retains their original ingestion sequence order deterministically.
+### 3.4 Hybrid search & Rerank
+Queries vectors applying evidence-driven scope filters (e.g. searching only runbooks related to services coverage summary of `EvidenceBundle`). Executes FlashRank cross-encoder rerank with a fallback word-overlap matcher for safety.
 
 ---
 
@@ -68,69 +59,69 @@ The timeline builder in [app/services/evidence/timeline.py](../opsgraph-ai/app/s
 We ran the test suite using `python -m pytest tests/` with the python environment inside the virtualenv `venv` directory.
 
 ### 4.1 Test Run Status
-*   **Total Tests Executed**: 41
-*   **Total Tests Passed**: 41
+*   **Total Tests Executed**: 49
+*   **Total Tests Passed**: 49
 *   **Total Tests Failed**: 0
 
-### 4.2 Executed Grounding Test Categories
-1.  **SHA-256 Content Hashing**:
-    *   `test_normalization_and_sha256`: Asserts SHA-256 hash generation on normalized records.
-2.  **Immutability Gates**:
-    *   `test_evidence_bundle_immutability`: Verifies mutating frozen attributes or tuple items raises Pydantic `ValidationError` or Python `TypeError`.
-3.  **Ingestion Stable Timelines**:
-    *   `test_stable_timeline_sorting`: Checks that items with identical timestamps retain ingestion sequence order.
-4.  **Confidence Scoring Components**:
-    *   `test_confidence_components_scorer`: Asserts score components and category trackers.
-5.  **Validator Rejections**:
-    *   `test_validator_rejections`: Verifies rejections for missing scenario IDs, mismatched incident IDs, future timestamps, and invalid services.
-6.  **Query Filtering**:
-    *   `test_packager_and_query_api`: Evaluates packaging and querying by service, type, or windows.
+### 4.2 Executed Knowledge Test Categories
+1.  **Document Loader Ingests**:
+    *   `test_document_loader`: Validates Yaml parsing, front matter keys, and metadata.
+2.  **Heading chunker splits**:
+    *   `test_heading_aware_chunker`: Tests section partitioning and sequential ID tracking.
+3.  **Embedding providers**:
+    *   `test_embedding_provider`: Asserts seed stability and vector normalization L2.
+4.  **Qdrant Adapter memory**:
+    *   `test_qdrant_adapter_in_memory`: Verifies collection creation, upserts, deletes, and service filter queries.
+5.  **Rerank Fallbacks**:
+    *   `test_reranker_fallback`: Validates Jaccard overlap and heading boosts.
+6.  **Retriever Coordinate**:
+    *   `test_hybrid_retriever`: Asserts hybrid queries with evidence filtering and KnowledgeBundle immutability.
 
 ---
 
 ## 5. Architectural Decisions & Deviations
 
-*   **Frozen Tuple Collections**: Selected `tuple` over `list` inside the packaged bundle schema to ensure that list mutability traps are mitigated.
-*   **Evaluation Isolation**: Ensured that the runtime directory is strictly partitioned from evaluation metrics data (`golden.json`). Added explicit unit tests to assert that `golden.json` is not queried during normal tool executions.
+*   **Pydantic Immutability**: All Knowledge schemas enforce `model_config = {"frozen": True}` and collection fields are typed as `tuple` to ensure absolute immutability.
+*   **Fallback Reranker**: Designed a fallback overlap-scorer using token intersection when FlashRank model binaries cannot download offline.
+*   **Qdrant UUID Transposition**: Implemented transparent UUIDv5 mapping to make chunk IDs compatible with Qdrant string rules.
 
 ---
 
 ## 6. Technical Debt, Future Enhancements, and Constraints
 
 ### 6.1 Current Technical Debt
-*   **Deduplication Key Collisions**: If duplicate telemetry has conflicting observations, deduplication resolves based on first-in keys, keeping first message details.
+*   **Memory Cache Volatility**: Cache is currently volatile in-memory.
 
 ### 6.2 Future Enhancements
-*   **Graph Dependency Scopes**: Incorporate topology path distance metrics in confidence calculations (e.g. penalizing disconnected evidence chains).
+*   **Disk Cache Backing**: Add a persistent pickle/json disk cache file for caching embeddings.
 
 ### 6.3 Known Constraints
-*   **Deterministic Only**: The layer contains no LLM operations or prompt constructions, ensuring that reasoning remains decoupled.
+*   **No LLM usage**: Reasoning, LLM queries, and prompt compilation are completely omitted.
 
 ---
 
-## 7. Execution Roadmap (Phases 5 to 10)
+## 7. Execution Roadmap (Phases 6 to 10)
 
-1.  **Phase 5**: Knowledge Ingestion + Qdrant + FlashRank (RAG vector pipeline and reranker)
-2.  **Phase 6**: LLM Gateway + NeMo Guardrails (Centralized model routing and input/output safety)
-3.  **Phase 7**: LangGraph Investigation Engine (10-node state machine and routing paths)
-4.  **Phase 8**: FastAPI Endpoints (FASTAPI routes and incident POST handlers)
-5.  **Phase 9**: Streamlit Dashboard UI (Diagnostic interface and latency stats)
-6.  **Phase 10**: Evaluation + Docker + Portfolio Release (30 scenario bench tests and docker orchestration)
+1.  **Phase 6**: LLM Gateway + NeMo Guardrails (Centralized model routing and input/output safety)
+2.  **Phase 7**: LangGraph Investigation Engine (10-node state machine and routing paths)
+3.  **Phase 8**: FastAPI Endpoints (FASTAPI routes and incident POST handlers)
+4.  **Phase 9**: Streamlit Dashboard UI (Diagnostic interface and latency stats)
+5.  **Phase 10**: Evaluation + Docker + Portfolio Release (30 scenario bench tests and docker orchestration)
 
 ---
 
 ## 8. Repository Revision & Exit Ledger
 
 ### 8.1 Repository Revision
-*   **Active Branch**: `feature/phase-4-evidence-grounding`
+*   **Active Branch**: `feature/phase-5-knowledge-layer`
 *   **Refactoring Date**: 2026-07-08
 *   **Execution Workspace**: `opsgraph-ai/`
 
-### 8.2 Phase 4 Exit Checklist
+### 8.2 Phase 5 Exit Checklist
 
-*   `[x]` **Grounding Interfaces Compile**: Models compile and assert typed schemas.
-*   `[x]` **No LLM Creation of Evidence**: All normalization is programmatically deterministic.
-*   `[x]` **Rejections Verified**: Cross-scenario, future times, and topology rejections pass.
-*   `[x]` **All 41 Tests Pass**: Pytest suite reports 100% success.
-*   `[x]` **Feature Branch Created**: Active on `feature/phase-4-evidence-grounding`.
-*   `[x]` **No Phase 5 Leakage**: No vector database or Qdrant/embedding code has been created.
+*   `[x]` **RAG Interfaces Compile**: Models compile and assert typed schemas.
+*   `[x]` **No LLM Queries**: Execution contains zero LLM operations.
+*   `[x]` **Qdrant Adapter verified**: memory tests pass.
+*   `[x]` **All 49 Tests Pass**: Pytest suite reports 100% success.
+*   `[x]` **Feature Branch Created**: Active on `feature/phase-5-knowledge-layer`.
+*   `[x]` **No Phase 6 Leakage**: No gateway or routing code has been created.
