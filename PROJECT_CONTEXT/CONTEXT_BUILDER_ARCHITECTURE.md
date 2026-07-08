@@ -1,5 +1,5 @@
-# Deterministic Context Builder Architecture (Phase 6)
-**Document Status:** Finalized (Phase 6 Complete)  
+# Deterministic Context Builder Architecture (Phase 6 Stabilization)
+**Document Status:** Finalized (Phase 6 Stabilization Complete)  
 **Authoritative Reference:** Context Builder Design, Organizing, and Pruning Contracts  
 
 ---
@@ -20,7 +20,7 @@ KnowledgeBundle ---+
           InvestigationContext
                    |
                    v
-         Phase 7 Boundary (Prompt Assembly)
+         Phase 7 Boundary (Prompt Assembly & Gateway)
 ```
 
 ---
@@ -28,31 +28,31 @@ KnowledgeBundle ---+
 ## 2. In-Depth Context Processing Flow
 
 ```
-Input Validation (Scenario and Incident consistency check)
+Input Validation (Cross-scenario and incident consistency, Knowledge references)
           |
           v
 Context Normalization (ContextItem instantiation, SHA-256 stable IDs)
           |
           v
-Context Deduplication (Deterministic ID and content-hash merges)
+Context Deduplication (Tiered: identity deduplication vs Content-equivalence)
           |
           v
 Priority Scoring (Confidence, reliability, contradictions, reranks, fusion)
           |
           v
-Context Budget Allocation (Redistributing unused evidence budget to knowledge)
+Context Budget Allocation (Symmetric bidirectional redistribution pass)
           |
           v
 Sections Organization (Critical/Supporting/Contradictory/Runbooks/Knowledge)
           |
           v
-Lineage Preservation (Populating Citation maps and Provenance lists)
+Lineage Preservation & Citation Integrity Verification (No orphans allowed)
           |
           v
 Coverage & Gaps (Analysis of covered categories and warning reports)
           |
           v
-InvestigationContext (Immutable Pydantic model compilation)
+InvestigationContext (Immutable Pydantic model packaging)
 ```
 
 ---
@@ -83,22 +83,19 @@ An immutable (`frozen`) Pydantic model representing:
 
 ---
 
-## 4. Normalization & Identity Strategy
-*   **Stable ID generation**: Instead of using random UUIDs, context item IDs are computed using a SHA-256 hash of:
-    `scenario_id + ":" + incident_id + ":" + source_kind + ":" + source_id`
-    This ensures that identical inputs always generate identical item IDs.
-*   **Cost Approximation**: Word-count estimator determines the item cost deterministically.
+## 4. Input & Reference Validation
+Before context building starts, the `InputValidator` checks the relationship between bundles:
+*   **Scenario Consistency**: Rejects mismatched scenarios between Evidence and Knowledge.
+*   **Incident Consistency**: Rejects mismatched incident IDs.
+*   **Evidence Reference Validation**: Every evidence reference ID list preserved in `KnowledgeBundle.evidence_references` must resolve to a valid `Evidence` object inside `EvidenceBundle.evidence_list`. Orphan or duplicate references are rejected immediately using `ContextValidationError`.
 
 ---
 
-## 5. Context Deduplication Policy
-*   Deduplication occurs at two levels:
-    1.  *ID-Level*: Unique combination of `(source_kind, source_id)`.
-    2.  *Content-Level*: Unique SHA-256 hash of stripped lowercased content text.
-*   Upon merging duplicates:
-    *   Strongest scores (max priority, max retrieval scores) are preserved.
-    *   Metadata values are merged.
-    *   The count of duplicates removed is recorded in the execution metadata.
+## 5. Tiered Deduplication Policy
+To preserve source contexts, a tiered deduplication policy is executed:
+*   **Tier 1 — Definite Source Duplicate**: Same `source_kind` and `source_id`. Merged, preserving all metadata and provenance.
+*   **Tier 2 — Definite Knowledge Identity Duplicate**: Same `document_id` and `chunk_id`. Merged, preserving RRF fusion/rerank scores.
+*   **Tier 3 — Content-Equivalent, Different Provenance**: Same content text hash, but different document IDs, sections, versions, or source IDs. These **must not** collapse into a single item. They are kept as *separate* `ContextItem` objects, and tagged with `content_equivalence_group` and `content_equivalent_to` lists.
 
 ---
 
@@ -112,26 +109,74 @@ Priority scores are calculated using a configurable policy without LLM involveme
 
 ---
 
-## 7. Budget Allocation Strategy
-The budget manager uses an allocation strategy:
-1.  Divides total budget (e.g. 2000 words) into Evidence Allocation (50%), Knowledge Allocation (30%), and Reserved Prompt Overhead (20%).
-2.  Selects evidence items first. If evidence items consume less than the evidence allocation, the **unused evidence budget is redistributed to the knowledge allocation**.
-3.  Selects knowledge items up to the updated knowledge limit.
-4.  Prunes low-priority items at the boundary, ensuring no single item exceeds the remaining allocation.
+## 7. Budget Allocation & Pruning
+The budget manager implements a strict allocation strategy:
+*   **Bidirectional Capacity Redistribution**: Budget is initially split into evidence allocation (50%), knowledge allocation (30%), and reserved overhead (20%).
+    *   *First Pass*: Candidates are selected up to their initial category limit. Remaining candidates are placed in category overflow queues.
+    *   *Redistribution Pass*: Any unused evidence budget is offered to remaining knowledge overflow candidates, and any unused knowledge budget is offered to remaining evidence overflow candidates.
+*   **Oversized-Item Policy**: If a single item's cost exceeds the allowed category limit or remaining total budget:
+    *   Do not truncate the item.
+    *   Do not exceed the budget.
+    *   Exclude the item and record it in `execution_metadata` under `excluded_oversized_items` with the reason `OVERSIZED_ITEM_EXCLUDED`.
+    *   Report the exclusion inside `gap_summary.gaps`.
+*   **Exact Boundary**: Items are accepted if `cost == remaining budget`, and rejected if `cost > remaining budget`.
 
 ---
 
-## 8. Lineage Preservation
-*   **Citation Map**: Maps each item ID to direct references (telemetry record IDs and datasets for evidence, document paths, sections, and versions for runbooks).
-*   **Provenance Map**: Maps each item to its sequential creation pipeline history.
+## 8. Citation & Provenance Integrity Verification
+*   **Citation Map**: Maps each selected item ID to direct references (telemetry record IDs and datasets for evidence, document paths, sections, and versions for runbooks).
+*   **Provenance Map**: Maps each item to its sequential pipeline history.
+*   **Integrity check**: Prior to final packaging, the builder verifies that every selected item has a corresponding citation and provenance entry, and that no orphan citations exist. Failure to pass this verification raises `ContextValidationError`.
 
 ---
 
-## 9. Coverage and Gaps
-*   **Coverage**: Identifies coverage across 8 categories (`log`, `metric`, `trace`, `deployment`, `topology`, `runbook`, `operational_procedure`, `historical_incident_knowledge`).
-*   **Gap Reporting**: Reports warnings on missing trace/deployment data, degraded upstream retrievals, empty knowledge sets, and budget exclusions.
+## 9. Contradictory Evidence Retention
+*   Contradictory evidence must not be silently discarded during deduplication or priority pruning.
+*   Contradictory items are assigned to the `Contradictory Evidence` section.
+*   If tight budget constraints force the exclusion of contradictory evidence, the gap reporter adds a structured gap: `"Budget excluded contradictory evidence."`
 
 ---
 
-## 10. Phase 7 Boundary
-The downstream Prompt Assembly layer (Phase 7) will consume `InvestigationContext` to populate message templates. The Context Builder exposes no LLM gateway connection and remains 100% deterministic and isolated.
+## 10. Degraded Mode & Runtime Signaling
+*   Upstream degraded retrieval status (degraded mode boolean, vector store mode, embedding mode, reranker mode, and fallback reasons) are preserved and propagated to the final `InvestigationContext` without mutation.
+
+---
+
+## 11. Future Phase 7 Boundaries
+
+### 11.1 Provider-Agnostic LLM Gateway
+The LLM Gateway is designed to be provider-agnostic. It coordinates traffic routes through adapters:
+
+```
+Prompt Assembly
+      |
+      v
+Input Guardrails
+      |
+      v
+ LLM Gateway (Interface)
+      |
+      +---> Groq Adapter (First Provider implemented)
+      |
+      +---> Future Gemini Adapter
+      |
+      +---> Future OpenAI Adapter
+      |
+      +---> Future Local Model Adapter
+      |
+      v
+Output Guardrails
+      |
+      v
+Validated Response
+```
+
+*   Groq will be the first implemented adapter, but it does not define the Gateway interface.
+
+### 11.2 Guardrail Boundary
+*   **Input Guardrails**: Gates user input and generated prompt messages before routing to the LLM Gateway.
+*   **Output Guardrails**: Validates the model output for safety and contradictions.
+*   **Separation**: Prompt assembly does not contain provider transport parameters. Gateway adapters contain no prompt templates. LangGraph nodes do not contain large inline prompt strings.
+
+### 11.3 Python Runtime Notice
+All future dependencies (NeMo Guardrails, Portkey AI, evaluation frameworks) must be verified for compatibility under standard python runtime environments (recommended: **Python 3.11**) before commencing Phase 7 implementation.
