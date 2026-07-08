@@ -130,6 +130,35 @@ class ContextBuilder:
                     details=item.metadata
                 )
 
+        # Verify citation and provenance integrity
+        selected_ids = {x.item_id for x in selected_items}
+        for item_id in citation_map:
+            if item_id not in selected_ids:
+                raise ContextValidationError(f"Orphan citation found: key '{item_id}' has no corresponding selected item.")
+        
+        for item in selected_items:
+            if item.item_id not in citation_map:
+                raise ContextValidationError(f"Selected item '{item.item_id}' is missing a citation map entry.")
+            
+            cite = citation_map[item.item_id]
+            if item.source_kind == "evidence":
+                if cite.source_kind != "evidence" or not cite.evidence_provenance:
+                    raise ContextValidationError(f"Evidence item '{item.item_id}' has invalid citation details.")
+            else:
+                if cite.source_kind != "knowledge" or not cite.document_id or not cite.chunk_id:
+                    raise ContextValidationError(f"Knowledge item '{item.item_id}' has invalid citation details.")
+
+        for item in selected_items:
+            if item.item_id not in provenance_map:
+                raise ContextValidationError(f"Selected item '{item.item_id}' is missing a provenance map entry.")
+            prov = provenance_map[item.item_id]
+            if item.source_kind == "evidence":
+                if "Telemetry Record" not in prov.lineage:
+                    raise ContextValidationError(f"Evidence item '{item.item_id}' has invalid provenance lineage.")
+            else:
+                if "Knowledge Document" not in prov.lineage:
+                    raise ContextValidationError(f"Knowledge item '{item.item_id}' has invalid provenance lineage.")
+
         # 8. Context Section Division
         critical_evidence = []
         supporting_evidence = []
@@ -175,12 +204,21 @@ class ContextBuilder:
         )
 
         # 9. Coverage and Gap Analysis
+        contradictory_dropped = any(
+            x.source_kind == "evidence" and 
+            x.metadata.get("priority_penalties", {}).get("contradictions_penalty", 0.0) > 0.0
+            for x in dropped_items
+        )
+        oversized_exclusions = budget_summary_dict.get("excluded_oversized_items", ())
+
         coverage = CoverageAnalyzer.analyze(candidates, selected_items, duplicates_removed)
         gaps = GapReporter.report_gaps(
             coverage,
             evidence_bundle,
             knowledge_bundle,
-            budget_summary_dict["dropped_by_budget_count"]
+            budget_summary_dict["dropped_by_budget_count"],
+            contradictory_dropped=contradictory_dropped,
+            oversized_exclusions=oversized_exclusions
         )
 
         # 10. Execution Metadata & Duration
@@ -197,7 +235,8 @@ class ContextBuilder:
             build_duration_ms=round(duration_ms, 2),
             validation_status="valid",
             upstream_degraded_mode=upstream_degraded,
-            upstream_fallback_reasons=upstream_reasons
+            upstream_fallback_reasons=upstream_reasons,
+            excluded_oversized_items=oversized_exclusions
         )
 
         budget_summary = ContextBudgetSummary(

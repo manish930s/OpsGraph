@@ -43,19 +43,38 @@ class ContextDeduplicator:
                 })
                 continue
 
+            # Check if this content hash has been seen on different source keys
             if content_hash in seen_contents:
-                duplicates_removed += 1
-                idx = seen_contents[content_hash]
-                existing = unique_items[idx]
+                # Content-equivalent, different provenance (Tier 3)
+                # Keep it as a separate item, but add metadata group tracking
+                indices = seen_contents[content_hash]
                 
-                new_priority = max(existing.priority_score, item.priority_score)
-                unique_items[idx] = existing.model_copy(update={
-                    "priority_score": new_priority
-                })
+                # Enrich new item metadata
+                new_metadata = dict(item.metadata)
+                new_metadata["content_equivalence_group"] = content_hash
+                new_metadata["content_equivalent_to"] = [unique_items[i].source_id for i in indices]
+                
+                # Update metadata of all previously seen items in this group
+                for idx in indices:
+                    prev_item = unique_items[idx]
+                    prev_metadata = dict(prev_item.metadata)
+                    prev_equiv = prev_metadata.get("content_equivalent_to", [])
+                    if item.source_id not in prev_equiv:
+                        prev_equiv = list(prev_equiv) + [item.source_id]
+                    prev_metadata["content_equivalent_to"] = prev_equiv
+                    prev_metadata["content_equivalence_group"] = content_hash
+                    unique_items[idx] = prev_item.model_copy(update={"metadata": prev_metadata})
+                
+                # Add this index to seen_contents list
+                indices.append(len(unique_items))
+                
+                # Append item to unique_items
+                unique_items.append(item.model_copy(update={"metadata": new_metadata}))
+                seen_keys.add(dedup_key)
                 continue
                 
             seen_keys.add(dedup_key)
-            seen_contents[content_hash] = len(unique_items)
+            seen_contents[content_hash] = [len(unique_items)]
             unique_items.append(item)
             
         return unique_items, duplicates_removed

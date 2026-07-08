@@ -42,3 +42,18 @@ class InputValidator:
                 raise ContextScopeMismatchError(
                     f"Mismatched scenario between EvidenceBundle ({first_scenario}) and KnowledgeBundle ({kb_scenario})"
                 )
+
+            # Validate that every evidence reference resolves to a valid evidence item
+            valid_evidence_ids = {ev.evidence_id for ev in ev_list}
+            if knowledge_bundle.evidence_references:
+                seen_refs = set()
+                for ref in knowledge_bundle.evidence_references:
+                    if not ref:
+                        raise ContextValidationError("Malformed empty evidence reference found in KnowledgeBundle.")
+                    if ref in seen_refs:
+                        raise ContextValidationError(f"Duplicate evidence reference found in KnowledgeBundle: '{ref}'")
+                    seen_refs.add(ref)
+                    if ref not in valid_evidence_ids:
+                        raise ContextValidationError(
+                            f"Orphan knowledge evidence reference: '{ref}' is not present in EvidenceBundle."
+                        )

@@ -90,7 +90,9 @@ class GapReporter:
         coverage: ContextCoverageSummary,
         evidence_bundle: EvidenceBundle,
         knowledge_bundle: KnowledgeBundle | None,
-        dropped_by_budget_count: int
+        dropped_by_budget_count: int,
+        contradictory_dropped: bool = False,
+        oversized_exclusions: tuple[str, ...] = ()
     ) -> ContextGapSummary:
         gaps = []
         warnings = []
@@ -121,6 +123,16 @@ class GapReporter:
         # 5. Budget exclusion warning
         if dropped_by_budget_count > 0:
             warnings.append("Budget excluded lower-priority context.")
+
+        # 6. Budget excluded contradictory evidence
+        if contradictory_dropped:
+            gaps.append("Budget excluded contradictory evidence.")
+
+        # 7. Excluded oversized items
+        for excl in oversized_exclusions:
+            parts = excl.split(" - ")
+            item_info = parts[0]
+            gaps.append(f"Oversized item {item_info} excluded (reason: OVERSIZED_ITEM_EXCLUDED).")
 
         return ContextGapSummary(
             gaps=tuple(gaps),
