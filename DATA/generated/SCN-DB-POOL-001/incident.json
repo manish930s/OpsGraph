@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "incident_id": "INC-0042",
+  "scenario_id": "SCN-DB-POOL-001",
+  "title": "Checkout API latency and 503 spike",
+  "description": "Checkout requests became slow and 503 responses increased shortly after a deployment.",
+  "environment": "production-sim",
+  "severity": "SEV-1",
+  "reported_services": [
+    "checkout-service"
+  ],
+  "reported_symptoms": [
+    "high latency",
+    "HTTP 503 increase"
+  ],
+  "reported_at": "2026-01-15T14:10:00Z",
+  "investigation_window": {
+    "start": "2026-01-15T13:55:00Z",
+    "end": "2026-01-15T14:30:00Z"
+  },
+  "status": "open"
+}

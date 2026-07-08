@@ -1,0 +1,15 @@
+{
+  "scenario_id": "SCN-DB-POOL-001",
+  "generator_version": "0.1.0",
+  "random_seed": 42001,
+  "schema_version": "1.0",
+  "files": [
+    "metrics.jsonl",
+    "logs.jsonl",
+    "traces.jsonl",
+    "deployments.json",
+    "incident.json",
+    "evidence.json",
+    "golden.json"
+  ]
+}

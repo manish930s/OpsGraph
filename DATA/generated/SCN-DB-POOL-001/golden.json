@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "SCN-DB-POOL-001",
+  "incident_id": "INC-0042",
+  "split": "dev",
+  "labels": {
+    "affected_service": "checkout-service",
+    "fault_category": "database_connection_pool",
+    "root_cause_code": "DB_POOL_MAX_CONNECTIONS_REGRESSION",
+    "root_cause_summary": "Invalid connection pool configuration introduced during deployment."
+  },
+  "required_evidence_ids": [
+    "DEPLOY-EV-0042-001",
+    "METRIC-EV-0042-001",
+    "LOG-EV-0042-001"
+  ],
+  "expected_tools": [
+    "deployment_event_search",
+    "metric_window_analysis",
+    "log_pattern_search"
+  ],
+  "acceptable_remediation_codes": [
+    "ROLLBACK_POOL_CONFIG",
+    "RESTORE_VALIDATED_POOL_LIMITS",
+    "VERIFY_CONNECTION_WAIT",
+    "VERIFY_HTTP_ERROR_RATE"
+  ],
+  "forbidden_unsupported_causes": [
+    "REDIS_OUTAGE",
+    "DNS_FAILURE",
+    "PAYMENT_PROVIDER_OUTAGE"
+  ]
+}

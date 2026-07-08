@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "scenario_id": "SCN-DB-POOL-001",
+  "title": "Checkout connection pool regression",
+  "fault_category": "database_connection_pool",
+  "difficulty": "medium",
+  "random_seed": 42001,
+  "system": {
+    "environment": "production-sim",
+    "primary_service": "checkout-service",
+    "affected_dependencies": [
+      "checkout-db"
+    ]
+  },
+  "timeline": {
+    "scenario_start": "2026-01-15T14:00:00Z",
+    "change_time": "2026-01-15T14:02:00Z",
+    "fault_onset": "2026-01-15T14:05:00Z",
+    "symptom_onset": "2026-01-15T14:08:00Z",
+    "incident_opened": "2026-01-15T14:10:00Z",
+    "scenario_end": "2026-01-15T14:30:00Z"
+  },
+  "ground_truth": {
+    "root_cause_code": "DB_POOL_MAX_CONNECTIONS_REGRESSION",
+    "root_cause_summary": "A deployment introduced an invalid database connection pool configuration.",
+    "affected_service": "checkout-service"
+  },
+  "required_evidence_types": [
+    "deployment",
+    "metric",
+    "log"
+  ],
+  "supporting_evidence_types": [
+    "trace",
+    "historical_incident"
+  ],
+  "expected_tools": [
+    "deployment_event_search",
+    "metric_window_analysis",
+    "log_pattern_search"
+  ],
+  "acceptable_remediation_codes": [
+    "ROLLBACK_POOL_CONFIG",
+    "RESTORE_VALIDATED_POOL_LIMITS",
+    "VERIFY_CONNECTION_WAIT",
+    "VERIFY_HTTP_ERROR_RATE"
+  ]
+}

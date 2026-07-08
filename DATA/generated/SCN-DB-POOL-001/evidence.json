@@ -1,0 +1,83 @@
+[
+  {
+    "evidence_id": "DEPLOY-EV-0042-001",
+    "source_type": "deployment",
+    "service": "checkout-service",
+    "observation": "A deployment with a connection pool configuration change occurred before symptom onset.",
+    "source_record_ids": [
+      "DEPLOY-0042-001"
+    ],
+    "schema_version": "1.0",
+    "incident_id": "INC-0042",
+    "scenario_id": "SCN-DB-POOL-001",
+    "provenance": {
+      "dataset": "opsgraph-synthetic-v1",
+      "generator_version": "0.1.0"
+    }
+  },
+  {
+    "evidence_id": "METRIC-EV-0042-001",
+    "source_type": "metric",
+    "service": "checkout-service",
+    "observation": "Active database connections reached the configured maximum while connection wait latency increased.",
+    "source_record_ids": [
+      "M-0042-00036",
+      "M-0042-00037",
+      "M-0042-00041",
+      "M-0042-00042",
+      "M-0042-00046",
+      "M-0042-00047",
+      "M-0042-00051",
+      "M-0042-00052"
+    ],
+    "schema_version": "1.0",
+    "incident_id": "INC-0042",
+    "scenario_id": "SCN-DB-POOL-001",
+    "provenance": {
+      "dataset": "opsgraph-synthetic-v1",
+      "generator_version": "0.1.0"
+    }
+  },
+  {
+    "evidence_id": "LOG-EV-0042-001",
+    "source_type": "log",
+    "service": "checkout-service",
+    "observation": "Database connection acquisition timeout errors increased during the incident window.",
+    "source_record_ids": [
+      "LOG-0042-000100",
+      "LOG-0042-000101",
+      "LOG-0042-000102",
+      "LOG-0042-000103",
+      "LOG-0042-000104",
+      "LOG-0042-000105",
+      "LOG-0042-000106",
+      "LOG-0042-000107"
+    ],
+    "schema_version": "1.0",
+    "incident_id": "INC-0042",
+    "scenario_id": "SCN-DB-POOL-001",
+    "provenance": {
+      "dataset": "opsgraph-synthetic-v1",
+      "generator_version": "0.1.0"
+    }
+  },
+  {
+    "evidence_id": "TRACE-EV-0042-001",
+    "source_type": "trace",
+    "service": "checkout-service",
+    "observation": "Failed checkout traces spend most of their duration waiting to acquire a database connection.",
+    "source_record_ids": [
+      "tr-0042-7781",
+      "tr-0042-7781",
+      "tr-0042-7782",
+      "tr-0042-7782"
+    ],
+    "schema_version": "1.0",
+    "incident_id": "INC-0042",
+    "scenario_id": "SCN-DB-POOL-001",
+    "provenance": {
+      "dataset": "opsgraph-synthetic-v1",
+      "generator_version": "0.1.0"
+    }
+  }
+]

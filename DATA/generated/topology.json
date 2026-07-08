@@ -1,0 +1,88 @@
+{
+  "topology_version": "topology-v1",
+  "environment": "production-sim",
+  "nodes": [
+    {
+      "service_id": "web-frontend",
+      "type": "service"
+    },
+    {
+      "service_id": "api-gateway",
+      "type": "service"
+    },
+    {
+      "service_id": "checkout-service",
+      "type": "service"
+    },
+    {
+      "service_id": "inventory-service",
+      "type": "service"
+    },
+    {
+      "service_id": "payment-service",
+      "type": "service"
+    },
+    {
+      "service_id": "notification-service",
+      "type": "service"
+    },
+    {
+      "service_id": "inventory-db",
+      "type": "database"
+    },
+    {
+      "service_id": "checkout-db",
+      "type": "database"
+    },
+    {
+      "service_id": "payment-db",
+      "type": "database"
+    },
+    {
+      "service_id": "message-queue",
+      "type": "queue"
+    }
+  ],
+  "edges": [
+    {
+      "source": "web-frontend",
+      "target": "api-gateway",
+      "protocol": "HTTP"
+    },
+    {
+      "source": "api-gateway",
+      "target": "checkout-service",
+      "protocol": "HTTP"
+    },
+    {
+      "source": "api-gateway",
+      "target": "inventory-service",
+      "protocol": "HTTP"
+    },
+    {
+      "source": "checkout-service",
+      "target": "payment-service",
+      "protocol": "HTTP"
+    },
+    {
+      "source": "checkout-service",
+      "target": "checkout-db",
+      "protocol": "PostgreSQL"
+    },
+    {
+      "source": "inventory-service",
+      "target": "inventory-db",
+      "protocol": "PostgreSQL"
+    },
+    {
+      "source": "payment-service",
+      "target": "payment-db",
+      "protocol": "PostgreSQL"
+    },
+    {
+      "source": "notification-service",
+      "target": "message-queue",
+      "protocol": "AMQP"
+    }
+  ]
+}

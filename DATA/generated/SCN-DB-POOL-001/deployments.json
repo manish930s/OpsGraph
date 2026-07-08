@@ -1,0 +1,18 @@
+[
+  {
+    "event_id": "DEPLOY-0042-001",
+    "timestamp": "2026-01-15T14:02:00Z",
+    "event_type": "deployment",
+    "service": "checkout-service",
+    "environment": "production-sim",
+    "version_from": "checkout-v1.8.2",
+    "version_to": "checkout-v1.8.3",
+    "change_summary": "Application and connection pool configuration update",
+    "change_codes": [
+      "APP_RELEASE",
+      "DB_POOL_CONFIG_CHANGE"
+    ],
+    "actor_type": "ci_cd_pipeline",
+    "scenario_id": "SCN-DB-POOL-001"
+  }
+]
