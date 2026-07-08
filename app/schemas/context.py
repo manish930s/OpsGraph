@@ -79,6 +79,7 @@ class ContextExecutionMetadata(BaseModel):
     validation_status: str
     upstream_degraded_mode: bool
     upstream_fallback_reasons: tuple[str, ...] = Field(default_factory=tuple)
+    excluded_oversized_items: tuple[str, ...] = Field(default_factory=tuple)
 
 class ContextSection(BaseModel):
     model_config = {"frozen": True}
