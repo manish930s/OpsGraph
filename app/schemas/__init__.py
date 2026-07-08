@@ -80,5 +80,15 @@ __all__ = [
     "ContextExecutionMetadata",
     "ContextSection",
     "InvestigationContext",
+    # Prompting & Model Response
+    "Message",
+    "ModelRequest",
+    "RCADecisionResponse",
+    "CriticDecisionResponse",
+    "LLMExecutionMetadata",
+    "ValidatedModelResponse",
 ]
+
+from app.schemas.prompting import Message, ModelRequest
+from app.schemas.model_response import RCADecisionResponse, CriticDecisionResponse, LLMExecutionMetadata, ValidatedModelResponse
 

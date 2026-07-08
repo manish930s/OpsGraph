@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     LLM_API_KEY: str | None = Field(default=None)
     LLM_MODEL: str = Field(default="llama-3.3-70b-versatile")
     LLM_PROVIDER: str = Field(default="mock")
+    LLM_DEFAULT_PROVIDER: str = Field(default="groq")
+    GEMINI_MODEL: str = Field(default="gemini-1.5-flash")
+    LLM_REQUEST_TIMEOUT_SECONDS: float = Field(default=30.0)
+    LLM_MAX_RETRIES: int = Field(default=3)
+    LLM_FALLBACK_ENABLED: bool = Field(default=True)
+    LLM_FALLBACK_PROVIDER: str = Field(default="gemini")
 
     # --- REASONING ENGINE (GROQ / OTHER) ---
     GROQ_API_KEY: str | None = Field(default=None)
