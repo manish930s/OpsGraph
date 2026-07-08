@@ -3,6 +3,7 @@ from app.common.exceptions import ValidationError, EvidenceGroundingError
 from app.schemas.incident import IncidentRecord
 from app.schemas.evidence import Evidence
 from app.schemas.rca import Hypothesis
+from app.schemas.telemetry import ServiceTopology
 
 def validate_incident_record(incident: IncidentRecord) -> None:
     """
@@ -64,6 +65,54 @@ def validate_evidence_list(evidence_list: list[Evidence], incident_id: str, scen
                 f"Evidence {e.evidence_id} belongs to scenario {e.scenario_id}, "
                 f"but investigation context scenario is {scenario_id}"
             )
+
+
+def validate_evidence(evidence: Evidence, incident: IncidentRecord, topology: ServiceTopology) -> None:
+    """
+    Deterministically validates a single evidence item against incident context and topology boundaries.
+    Raises ValidationError on violation.
+    """
+    if not evidence.evidence_id:
+        raise ValidationError("Evidence is missing an evidence_id")
+
+    if not evidence.provenance or not evidence.provenance.dataset:
+        raise ValidationError(f"Evidence {evidence.evidence_id} is missing dataset provenance")
+
+    # Check scenario ID matching
+    if evidence.scenario_id != incident.scenario_id:
+        raise ValidationError(
+            f"Evidence {evidence.evidence_id} scenario_id '{evidence.scenario_id}' does not match "
+            f"incident scenario_id '{incident.scenario_id}'"
+        )
+
+    # Check incident ID matching
+    if evidence.incident_id != incident.incident_id:
+        raise ValidationError(
+            f"Evidence {evidence.evidence_id} incident_id '{evidence.incident_id}' does not match "
+            f"incident incident_id '{incident.incident_id}'"
+        )
+
+    # Check for future timestamps relative to the investigation window bounds
+    if evidence.time_window and evidence.time_window.start:
+        try:
+            ev_dt = datetime.fromisoformat(evidence.time_window.start.replace("Z", "+00:00"))
+            window_end_dt = datetime.fromisoformat(incident.investigation_window.end.replace("Z", "+00:00"))
+            if ev_dt > window_end_dt:
+                raise ValidationError(
+                    f"Evidence {evidence.evidence_id} timestamp '{evidence.time_window.start}' is in the future "
+                    f"relative to investigation window end '{incident.investigation_window.end}'"
+                )
+        except ValueError as ex:
+            raise ValidationError(f"Invalid timestamp format in evidence {evidence.evidence_id}: {ex}")
+
+    # Verify service reference exists in service topology nodes
+    topology_services = {node.service_id for node in topology.nodes}
+    if evidence.service not in topology_services:
+        raise ValidationError(
+            f"Evidence {evidence.evidence_id} references service '{evidence.service}' which is not present "
+            f"in the service topology nodes list: {topology_services}"
+        )
+
 
 def validate_hypothesis_citations(hypothesis: Hypothesis, available_evidence: list[Evidence]) -> tuple[bool, list[str]]:
     """
