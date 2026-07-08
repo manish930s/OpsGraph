@@ -28,8 +28,8 @@ class GeminiProvider(LLMProvider):
         return self._model_id
 
     def generate(self, request: ModelRequest) -> str:
-        # Check for mock setting or missing api key for safety in tests/offline sandbox
-        if settings.LLM_PROVIDER == "mock" or not self._api_key or self._api_key == "mock":
+        # Check for mock setting for safety in tests/offline sandbox
+        if settings.LLM_PROVIDER == "mock":
             time.sleep(0.01)
             ref_str = request.context_references[0] if request.context_references else "CTX-E1"
             return (
@@ -46,6 +46,9 @@ class GeminiProvider(LLMProvider):
                 '  "recommended_next_steps": ["Check network layer metrics."]\n'
                 '}'
             )
+
+        if not self._api_key or self._api_key == "mock":
+            raise ProviderConfigurationError("Gemini API key is missing or invalid.")
 
         import google.generativeai as genai
         from google.api_core.exceptions import GoogleAPIError, DeadlineExceeded, PermissionDenied, ResourceExhausted

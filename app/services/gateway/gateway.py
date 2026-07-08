@@ -23,6 +23,39 @@ from app.services.gateway.errors import (
 )
 logger = logging.getLogger(__name__)
 
+def extract_json_payload(text: str) -> str:
+    """
+    Extracts JSON substring if wrapped in markdown code blocks or surrounding text.
+    """
+    text = text.strip()
+    try:
+        json.loads(text)
+        return text
+    except json.JSONDecodeError:
+        pass
+
+    import re
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
+    if match:
+        candidate = match.group(1).strip()
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
+
+    first_brace = text.find("{")
+    last_brace = text.rfind("}")
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        candidate = text[first_brace:last_brace + 1].strip()
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            pass
+
+    return text
+
 class LLMGateway:
     """
     Unified, provider-agnostic model gateway orchestrating validation, guards, retries,
@@ -38,6 +71,46 @@ class LLMGateway:
         self.retry_handler_factory = retry_handler_factory or (
             lambda: BoundedRetryHandler(max_retries=settings.LLM_MAX_RETRIES)
         )
+        self.validate_configuration()
+
+    def validate_configuration(self):
+        """
+        Validates central model settings for timeouts, retries, and credential existence.
+        """
+        if settings.LLM_DEFAULT_PROVIDER not in ("groq", "gemini", "mock"):
+            raise ProviderConfigurationError(f"Unknown default provider: '{settings.LLM_DEFAULT_PROVIDER}'")
+        
+        if settings.LLM_FALLBACK_ENABLED:
+            if not settings.LLM_FALLBACK_PROVIDER:
+                raise ProviderConfigurationError("Fallback is enabled but LLM_FALLBACK_PROVIDER is not set.")
+            if settings.LLM_FALLBACK_PROVIDER not in ("groq", "gemini", "mock"):
+                raise ProviderConfigurationError(f"Unknown fallback provider: '{settings.LLM_FALLBACK_PROVIDER}'")
+            if settings.LLM_FALLBACK_PROVIDER == settings.LLM_DEFAULT_PROVIDER:
+                raise ProviderConfigurationError(
+                    f"Fallback provider '{settings.LLM_FALLBACK_PROVIDER}' cannot be equal to "
+                    f"default provider '{settings.LLM_DEFAULT_PROVIDER}'."
+                )
+
+        if settings.LLM_REQUEST_TIMEOUT_SECONDS <= 0:
+            raise ProviderConfigurationError(
+                f"LLM_REQUEST_TIMEOUT_SECONDS must be positive, got {settings.LLM_REQUEST_TIMEOUT_SECONDS}"
+            )
+        if settings.LLM_MAX_RETRIES < 0:
+            raise ProviderConfigurationError(
+                f"LLM_MAX_RETRIES must be non-negative, got {settings.LLM_MAX_RETRIES}"
+            )
+
+        if settings.LLM_PROVIDER != "mock":
+            if settings.LLM_DEFAULT_PROVIDER == "groq" and (not settings.GROQ_API_KEY or settings.GROQ_API_KEY == "mock"):
+                raise ProviderConfigurationError("GROQ_API_KEY is required for default provider 'groq'.")
+            if settings.LLM_DEFAULT_PROVIDER == "gemini" and (not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY == "mock"):
+                raise ProviderConfigurationError("GEMINI_API_KEY is required for default provider 'gemini'.")
+            
+            if settings.LLM_FALLBACK_ENABLED:
+                if settings.LLM_FALLBACK_PROVIDER == "groq" and (not settings.GROQ_API_KEY or settings.GROQ_API_KEY == "mock"):
+                    raise ProviderConfigurationError("GROQ_API_KEY is required for fallback provider 'groq'.")
+                if settings.LLM_FALLBACK_PROVIDER == "gemini" and (not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY == "mock"):
+                    raise ProviderConfigurationError("GEMINI_API_KEY is required for fallback provider 'gemini'.")
 
     def _get_provider_instance(self, provider_name: str) -> Any:
         if provider_name == "groq":
@@ -48,6 +121,7 @@ class LLMGateway:
             raise ProviderConfigurationError(f"Unsupported provider: '{provider_name}'")
 
     def generate(self, request: ModelRequest) -> ValidatedModelResponse:
+        self.validate_configuration()
         start_time = time.perf_counter()
         
         # 1. Run Input Guardrails
@@ -74,8 +148,11 @@ class LLMGateway:
             retry_handler = self.retry_handler_factory()
             raw_content, retry_count = retry_handler.execute(lambda: provider.generate(request))
         except Exception as e:
+            from app.services.gateway.errors import ProviderRateLimitError, ProviderTimeoutError, ProviderUnavailableError
+            is_transient = isinstance(e, (ProviderRateLimitError, ProviderTimeoutError, ProviderUnavailableError))
+
             # Check if fallback is enabled and we have a different fallback provider
-            if settings.LLM_FALLBACK_ENABLED and fallback_provider_name != initial_provider_name:
+            if is_transient and settings.LLM_FALLBACK_ENABLED and fallback_provider_name != initial_provider_name:
                 logger.warning(
                     f"Initial provider '{provider_name}' failed after {retry_count} retries. "
                     f"Initiating fallback to '{fallback_provider_name}' due to error: {str(e)}"
@@ -92,14 +169,15 @@ class LLMGateway:
                 raw_content, fallback_retries = fallback_retry_handler.execute(lambda: provider.generate(request))
                 retry_count += fallback_retries
             else:
-                logger.error(f"Gateway request failed on '{provider_name}' and fallback is disabled/unavailable.")
+                logger.error(f"Gateway request failed on '{provider_name}' and fallback is disabled/unavailable/ineligible.")
                 raise e
 
         # 4. Run Output Guardrails
         logger.info("LLMGateway: Evaluating output guardrails")
+        cleaned_content = extract_json_payload(raw_content)
         try:
             for guard in self.output_guards:
-                guard.evaluate(raw_content, request)
+                guard.evaluate(cleaned_content, request)
             output_guard_status = "passed"
         except GuardrailRejectedError as e:
             output_guard_status = "rejected"
@@ -110,7 +188,7 @@ class LLMGateway:
 
         # 5. Parse and Validate Response Schema
         try:
-            parsed_data = json.loads(raw_content)
+            parsed_data = json.loads(cleaned_content)
             if request.task_type == "rca":
                 parsed_response = RCADecisionResponse(**parsed_data)
                 response_id = parsed_response.response_id

@@ -1,8 +1,8 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Any
 
 class RCADecisionResponse(BaseModel):
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
     response_id: str
     task_type: str = Field(default="rca")
     summary: str
@@ -14,8 +14,21 @@ class RCADecisionResponse(BaseModel):
     uncertainty_statements: tuple[str, ...] = Field(default_factory=tuple)
     recommended_next_steps: tuple[str, ...] = Field(default_factory=tuple)
 
+    @field_validator(
+        "supporting_evidence_references",
+        "contradicting_evidence_references",
+        "knowledge_references",
+        mode="before"
+    )
+    @classmethod
+    def deduplicate_references(cls, v: Any) -> Any:
+        if isinstance(v, (list, tuple)):
+            seen = set()
+            return tuple(x for x in v if not (x in seen or seen.add(x)))
+        return v
+
 class CriticDecisionResponse(BaseModel):
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
     response_id: str
     task_type: str = Field(default="critic")
     is_valid: bool
