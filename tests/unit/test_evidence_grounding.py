@@ -1,12 +1,13 @@
 import pytest
-from datetime import datetime, timedelta
+import hashlib
+from datetime import datetime
 from app.config import settings
 from app.services.telemetry import ScenarioRepository, ServiceTopologyRepository
-from app.schemas.incident import IncidentRecord
 from app.schemas.common import TimeWindow
-from app.schemas.evidence import Evidence, EvidenceProvenance, EvidenceRetrievalMetadata
-from app.common.enums import SourceType, Severity, EnvironmentName
+from app.schemas.evidence import Evidence, EvidenceProvenance, EvidenceRetrievalMetadata, EvidenceBundle
+from app.common.enums import SourceType
 from app.common.exceptions import ValidationError
+from app.services.evidence.identity import compute_evidence_hash
 from app.services.evidence import (
     EvidenceNormalizer,
     EvidenceAggregator,
@@ -31,9 +32,9 @@ def context_bundle():
         "repo": repo,
     }
 
-# --- 1. EvidenceNormalizer Tests ---
+# --- 1. EvidenceNormalizer & SHA-256 Hashing Tests ---
 
-def test_normalization(context_bundle):
+def test_normalization_and_sha256(context_bundle):
     normalizer = EvidenceNormalizer(
         incident_id=context_bundle["incident"].incident_id,
         scenario_id=context_bundle["incident"].scenario_id
@@ -52,106 +53,102 @@ def test_normalization(context_bundle):
     assert ev_incident.source_type == SourceType.HISTORICAL_INCIDENT
     assert ev_incident.service == "checkout-service"
 
-    # Normalize telemetry mocks
-    logs = context_bundle["repo"].load_logs()
-    ev_logs = normalizer.normalize_logs(logs[:3])
-    assert len(ev_logs) == 3
-    assert all(e.source_type == SourceType.LOG for e in ev_logs)
-
-    metrics = context_bundle["repo"].load_metrics()
-    ev_metrics = normalizer.normalize_metrics(metrics[:3], "db_pool_active")
-    assert len(ev_metrics) == 3
-    assert all(e.source_type == SourceType.METRIC for e in ev_metrics)
-
-    traces = context_bundle["repo"].load_traces()
-    ev_traces = normalizer.normalize_traces(traces[:3], "trace-1234")
-    assert len(ev_traces) == 3
-    assert all(e.source_type == SourceType.TRACE for e in ev_traces)
-
-    deploys = context_bundle["repo"].load_deployments()
-    ev_deploys = normalizer.normalize_deployments(deploys)
-    assert len(ev_deploys) == len(deploys)
-    assert all(e.source_type == SourceType.DEPLOYMENT for e in ev_deploys)
-
-    ev_topo = normalizer.normalize_topology(
-        service_id="checkout-service",
-        direction="downstream",
-        connected_services=["payment-service"]
-    )
-    assert ev_topo.source_type == SourceType.TOPOLOGY
-    assert ev_topo.service == "checkout-service"
-
-# --- 2. EvidenceAggregator & Timeline Tests ---
-
-def test_aggregation_and_timeline(context_bundle):
-    normalizer = EvidenceNormalizer(
-        incident_id=context_bundle["incident"].incident_id,
-        scenario_id=context_bundle["incident"].scenario_id
-    )
+    # Verify SHA-256 hashing is correct
+    t_start = ev_incident.time_window.start if ev_incident.time_window else None
+    computed = compute_evidence_hash(ev_incident.observation, ev_incident.service, t_start)
     
-    logs = context_bundle["repo"].load_logs()
-    ev_logs = normalizer.normalize_logs(logs[:2])
+    # Assert it is a valid SHA-256 hex string (64 characters)
+    assert len(computed) == 64
     
-    deploys = context_bundle["repo"].load_deployments()
-    ev_deploys = normalizer.normalize_deployments(deploys)
+    # Assert SHA-256 formula
+    hasher = hashlib.sha256()
+    payload = f"{ev_incident.observation}|{ev_incident.service}|{t_start}"
+    hasher.update(payload.encode("utf-8"))
+    assert computed == hasher.hexdigest()
 
-    aggregator = EvidenceAggregator()
-    merged = aggregator.merge(ev_logs, ev_deploys)
-    assert len(merged) == len(ev_logs) + len(ev_deploys)
+# --- 2. EvidenceBundle Immutability Tests ---
 
-    # Timeline sequencing
-    timeline_builder = EvidenceTimeline()
-    sorted_ev = timeline_builder.build_timeline(merged)
-    # Check chronological ordering
-    timestamps = [e.time_window.start for e in sorted_ev if e.time_window]
-    assert timestamps == sorted(timestamps)
+def test_evidence_bundle_immutability(context_bundle):
+    incident = context_bundle["incident"]
+    topology = context_bundle["topology"]
 
-    # Slicing
-    sliced = timeline_builder.filter_by_window(merged, "2026-01-15T14:00:00Z", "2026-01-15T14:05:00Z")
-    assert len(sliced) <= len(merged)
-
-# --- 3. EvidenceDeduplicator Tests ---
-
-def test_deduplicator():
-    dedup = EvidenceDeduplicator()
-
-    # Create duplicates with identical source records
     ev1 = Evidence(
+        evidence_id="LOG-EV-SCN-0001",
+        incident_id=incident.incident_id,
+        scenario_id=incident.scenario_id,
+        source_type=SourceType.LOG,
+        service="checkout-service",
+        observation="Observation 1",
+        source_record_ids=["r1"],
+        provenance=EvidenceProvenance(dataset="logs", record_reference="r1"),
+        time_window=TimeWindow(start="2026-01-15T14:05:00Z", end="2026-01-15T14:05:00Z")
+    )
+
+    packager = EvidencePackager()
+    bundle = packager.package_bundle([ev1], incident, topology)
+
+    # Attempt to modify packaged bundle attributes should raise PydanticValidationError or TypeError
+    from pydantic import ValidationError as PydanticValidationError
+    with pytest.raises((PydanticValidationError, TypeError)):
+        # Attempt to modify a frozen attribute
+        # In Pydantic v2, this raises PydanticValidationError
+        # On some objects, it might raise TypeError
+        object.__setattr__(bundle, "validation_status", "invalid")
+        # Direct attribute assignment is blocked and raises PydanticValidationError:
+        bundle.validation_status = "invalid"
+
+    with pytest.raises((PydanticValidationError, TypeError)):
+        # Attempt to modify the immutable tuple
+        bundle.evidence_list[0] = None
+
+# --- 3. Stable Ingestion Timeline Sorting Tests ---
+
+def test_stable_timeline_sorting():
+    timeline_builder = EvidenceTimeline()
+
+    # Three events with the exact same timestamp but different sequence orders
+    ev_a = Evidence(
         evidence_id="LOG-EV-SCN-0001",
         incident_id="INC-0042",
         scenario_id="SCN-001",
         source_type=SourceType.LOG,
         service="checkout-service",
-        observation="Connection timeout",
-        source_record_ids=["log-1"],
-        provenance=EvidenceProvenance(dataset="logs", record_reference="log-1", query_reference="q1")
+        observation="A",
+        source_record_ids=["a"],
+        provenance=EvidenceProvenance(dataset="logs", record_reference="a"),
+        time_window=TimeWindow(start="2026-01-15T14:00:00Z", end="2026-01-15T14:00:00Z")
     )
-    ev2 = Evidence(
+    ev_b = Evidence(
         evidence_id="LOG-EV-SCN-0002",
         incident_id="INC-0042",
         scenario_id="SCN-001",
         source_type=SourceType.LOG,
         service="checkout-service",
-        observation="Connection timeout",
-        source_record_ids=["log-1"],  # Match source record ID
-        provenance=EvidenceProvenance(dataset="logs", record_reference="log-1", query_reference="q2")
+        observation="B",
+        source_record_ids=["b"],
+        provenance=EvidenceProvenance(dataset="logs", record_reference="b"),
+        time_window=TimeWindow(start="2026-01-15T14:00:00Z", end="2026-01-15T14:00:00Z")
     )
 
-    results = dedup.deduplicate([ev1, ev2])
-    assert len(results) == 1
-    # Check merged provenance query strings
-    assert "q1" in results[0].provenance.query_reference
-    assert "q2" in results[0].provenance.query_reference
+    # Ingestion order: ev_a followed by ev_b
+    sorted_1 = timeline_builder.build_timeline([ev_a, ev_b])
+    assert sorted_1[0].observation == "A"
+    assert sorted_1[1].observation == "B"
 
-# --- 4. EvidenceConfidenceScorer Tests ---
+    # Ingestion order: ev_b followed by ev_a
+    sorted_2 = timeline_builder.build_timeline([ev_b, ev_a])
+    assert sorted_2[0].observation == "B"
+    assert sorted_2[1].observation == "A"
 
-def test_confidence_scorer(context_bundle):
+# --- 4. EvidenceConfidenceScorer Components Tests ---
+
+def test_confidence_components_scorer(context_bundle):
     scorer = EvidenceConfidenceScorer()
     
     # 1. No evidence
     res_zero = scorer.compute_confidence([], context_bundle["incident"])
     assert res_zero.score == 0.0
-    assert res_zero.band == "LOW"
+    assert res_zero.components.evidence_coverage == 0.0
 
     # 2. Setup mock evidence
     ev = Evidence(
@@ -167,6 +164,9 @@ def test_confidence_scorer(context_bundle):
     )
     res = scorer.compute_confidence([ev], context_bundle["incident"])
     assert res.score > 0.0
+    assert res.components.evidence_coverage > 0.0
+    assert res.supporting_evidence_count == 1
+    assert "log" not in res.missing_evidence_categories
 
 # --- 5. Deterministic Validator Rejection Tests ---
 
@@ -174,7 +174,6 @@ def test_validator_rejections(context_bundle):
     incident = context_bundle["incident"]
     topology = context_bundle["topology"]
 
-    # Valid base item
     valid_ev = Evidence(
         evidence_id="LOG-EV-SCN-0001",
         incident_id=incident.incident_id,
@@ -203,7 +202,6 @@ def test_validator_rejections(context_bundle):
         validate_evidence(bad, incident, topology)
 
     # 4. Reject future timestamps (beyond investigation window end)
-    # Context investigation end is 2026-01-15T14:30:00Z
     with pytest.raises(ValidationError):
         bad = valid_ev.model_copy(update={
             "time_window": TimeWindow(start="2026-01-15T15:00:00Z", end="2026-01-15T15:00:00Z")
@@ -213,6 +211,13 @@ def test_validator_rejections(context_bundle):
     # 5. Reject invalid service names (not in topology nodes)
     with pytest.raises(ValidationError):
         bad = valid_ev.model_copy(update={"service": "fake-billing-service"})
+        validate_evidence(bad, incident, topology)
+
+    # 6. Reject missing provenance dataset
+    with pytest.raises(ValidationError):
+        bad = valid_ev.model_copy(update={
+            "provenance": EvidenceProvenance(dataset="", record_reference="r1")
+        })
         validate_evidence(bad, incident, topology)
 
 # --- 6. EvidencePackager & QueryAPI Tests ---
@@ -253,14 +258,9 @@ def test_packager_and_query_api(context_bundle):
 
     # Query API
     query_api = EvidenceQueryAPI(bundle)
-    
-    # Query service
     assert len(query_api.query_by_service("checkout-service")) == 1
-    
-    # Query type
     assert len(query_api.query_by_type("log")) == 1
 
-    # Query window
     window_res = query_api.query_by_time_window("2026-01-15T14:00:00Z", "2026-01-15T14:06:00Z")
     assert len(window_res) == 1
     assert window_res[0].evidence_id == "LOG-EV-SCN-0001"

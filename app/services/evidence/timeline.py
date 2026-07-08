@@ -8,19 +8,21 @@ logger = logging.getLogger("opsgraph.evidence.timeline")
 class EvidenceTimeline:
     """
     Manages chronological sequencing and window-slicing of evidence records.
+    Ensures stable, deterministic ordering for items with identical timestamps.
     """
     def build_timeline(self, evidences: list[Evidence]) -> list[Evidence]:
         """
-        Sorts all evidence items chronologically. Items without timestamps are placed last.
+        Sorts all evidence items chronologically. Stable ordering is preserved via index.
         """
-        def get_timestamp(ev: Evidence) -> str:
-            if ev.time_window and ev.time_window.start:
-                return ev.time_window.start
-            return "9999-12-31T23:59:59Z"
+        indexed_evidences = []
+        for idx, ev in enumerate(evidences):
+            t_str = ev.time_window.start if ev.time_window and ev.time_window.start else "9999-12-31T23:59:59Z"
+            indexed_evidences.append((t_str, idx, ev))
 
-        sorted_ev = sorted(evidences, key=get_timestamp)
-        logger.info(f"Built chronological timeline of {len(sorted_ev)} elements")
-        return sorted_ev
+        # Sort first by timestamp string, second by original list index
+        sorted_triplets = sorted(indexed_evidences, key=lambda x: (x[0], x[1]))
+        logger.info(f"Built chronological timeline of {len(sorted_triplets)} elements with stable sequence order.")
+        return [item[2] for item in sorted_triplets]
 
     def filter_by_window(self, evidences: list[Evidence], start: str, end: str) -> list[Evidence]:
         """
@@ -30,8 +32,6 @@ class EvidenceTimeline:
         results = []
         for ev in evidences:
             if not ev.time_window or not ev.time_window.start:
-                # Include timeless items (like topology) by default or skip?
-                # Usually we skip them for timeline filtering, or include them. Let's skip them.
                 continue
             
             try:
