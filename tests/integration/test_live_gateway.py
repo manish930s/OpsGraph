@@ -42,31 +42,38 @@ def minimal_request():
 
 @pytest.mark.skipif(not os.environ.get("GROQ_API_KEY"), reason="GROQ_API_KEY not set in environment.")
 def test_live_groq_smoke(minimal_request):
-    # Temporarily set provider config to live to bypass mock checks
+    # Temporarily set provider config to live to bypass mock checks.
+    # Disable fallback so validate_configuration does not require the fallback provider key.
     with pytest.MonkeyPatch().context() as mp:
         mp.setattr(settings, "LLM_PROVIDER", "live")
         mp.setattr(settings, "LLM_DEFAULT_PROVIDER", "groq")
-        
+        mp.setattr(settings, "LLM_FALLBACK_ENABLED", False)
+
         gateway = LLMGateway()
         response = gateway.generate(minimal_request)
-        
+
         assert response.response_id == "RCA-LIVE-1"
         assert response.task_type == "rca"
         assert response.execution_metadata.final_provider == "groq"
         assert response.execution_metadata.latency_ms > 0
         assert "CTX-1" in response.parsed_response.supporting_evidence_references
+        assert response.execution_metadata.fallback_attempted is False
 
 @pytest.mark.skipif(not os.environ.get("GEMINI_API_KEY"), reason="GEMINI_API_KEY not set in environment.")
 def test_live_gemini_smoke(minimal_request):
+    # Temporarily set provider config to live to bypass mock checks.
+    # Disable fallback so validate_configuration does not require the fallback provider key.
     with pytest.MonkeyPatch().context() as mp:
         mp.setattr(settings, "LLM_PROVIDER", "live")
         mp.setattr(settings, "LLM_DEFAULT_PROVIDER", "gemini")
-        
+        mp.setattr(settings, "LLM_FALLBACK_ENABLED", False)
+
         gateway = LLMGateway()
         response = gateway.generate(minimal_request)
-        
+
         assert response.response_id == "RCA-LIVE-1"
         assert response.task_type == "rca"
         assert response.execution_metadata.final_provider == "gemini"
         assert response.execution_metadata.latency_ms > 0
         assert "CTX-1" in response.parsed_response.supporting_evidence_references
+        assert response.execution_metadata.fallback_attempted is False
