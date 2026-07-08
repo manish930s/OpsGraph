@@ -34,8 +34,8 @@ graph TD
     classDef implemented fill:#2ecc71,stroke:#27ae60,color:#fff;
     classDef planned fill:#3498db,stroke:#2980b9,color:#fff;
     
-    class Repos,Tools,Grounding,Knowledge,ContextBuilder implemented;
-    class Prompt,Engine,API,UI planned;
+    class Repos,Tools,Grounding,Knowledge,ContextBuilder,Prompt implemented;
+    class Engine,API,UI planned;
 ```
 
 ### Phase Roadmap Status
@@ -45,7 +45,7 @@ graph TD
 *   **Phase 4**: Evidence Grounding Layer — **[IMPLEMENTED]**
 *   **Phase 5**: Enterprise Knowledge Layer (RAG) — **[IMPLEMENTED & STABILIZED]**
 *   **Phase 6**: Context Builder — **[IMPLEMENTED]**
-*   **Phase 7**: Prompt Assembly + NeMo Guardrails + LLM Gateway — **[PLANNED]**
+*   **Phase 7**: Prompt Assembly + NeMo Guardrails + LLM Gateway — **[IMPLEMENTED]**
 *   **Phase 8**: LangGraph Investigation Engine — **[PLANNED]**
 *   **Phase 9**: FastAPI — **[PLANNED]**
 *   **Phase 10**: Streamlit UI — **[PLANNED]**

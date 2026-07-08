@@ -1,6 +1,6 @@
 # OpsGraph AI — Phase Migration Report
-**Document Status:** Finalized (Phase 6 Stabilization Complete)  
-**Reporting Phase:** Phase 6: Deterministic Context Builder (Stabilized)  
+**Document Status:** Finalized (Phase 7 Complete)  
+**Reporting Phase:** Phase 7: Prompt Assembly, Guardrails, and LLM Gateway  
 **Execution Date:** 2026-07-08  
 **Lead Engineer:** Antigravity (AI Coding Assistant)  
 
@@ -8,15 +8,15 @@
 
 ## 1. Executive Summary
 
-Phase 6 (Deterministic Context Builder) of the OpsGraph AI migration has been stabilized, audited, and tested. We have strengthened cross-bundle scope validations, added knowledge reference validations, implemented a tiered deduplication policy (preserving content-equivalence items with unique citations/provenances), formalized a bidirectional budget redistribution mechanism, defined explicit oversized-item exclusions, integrated comprehensive citation and provenance integrity passes, and propagated all degraded-mode and contradiction warnings cleanly. The full test suite runs successfully with 66 passing tests (an addition of 8 new stabilization tests).
+Phase 7 of the OpsGraph AI migration is complete and fully verified. We have built the prompting, guardrails, and LLM gateway modules, providing a unified, provider-agnostic bridge for structured model execution. Prompt Assembly isolates untrusted knowledge from instructions, and template versioning is managed via a template registry. The LLM Gateway orchestrates input/output safety guards, rate/timeout retries, fallback provider routing, JSON validation, and citation mapping. NeMo Guardrails has been structured as an adapter and operates in deferred execution mode due to Python 3.14 compilation blockers on Windows. All 78 tests across the repository pass successfully.
 
 ---
 
 ## 2. Repository Revision & Git Status
-*   **Active Branch**: `feature/phase-6-context-builder` (Verified using Git CLI)
+*   **Active Branch**: `feature/phase-7-prompt-guardrails-gateway` (Created off main, fast-forward merged with Phase 6)
 *   **Refactoring Date:** 2026-07-08
 *   **Execution Workspace:** `opsgraph-ai/`
-*   **Working Directory State:** Staged & Clean (except for migration report edits)
+*   **Working Directory State:** Clean & Verified (except for reports)
 
 ---
 
@@ -25,98 +25,81 @@ Phase 6 (Deterministic Context Builder) of the OpsGraph AI migration has been st
 All file paths listed below are relative to the target codebase root `opsgraph-ai/`.
 
 ### 3.1 Files Created
-*   `[NEW]` [app/schemas/context.py](../opsgraph-ai/app/schemas/context.py) - Canonical ContextItem and InvestigationContext schemas.
-*   `[NEW]` [app/services/context/exceptions.py](../opsgraph-ai/app/services/context/exceptions.py) - Domain exceptions (`ContextValidationError`, `ContextScopeMismatchError`, `ContextBudgetError`).
-*   `[NEW]` [app/services/context/identity.py](../opsgraph-ai/app/services/context/identity.py) - Deterministic SHA-256 ID generator.
-*   `[NEW]` [app/services/context/validator.py](../opsgraph-ai/app/services/context/validator.py) - Input bundle and knowledge evidence reference validation.
-*   `[NEW]` [app/services/context/normalizer.py](../opsgraph-ai/app/services/context/normalizer.py) - Canonical parser methods.
-*   `[NEW]` [app/services/context/deduplicator.py](../opsgraph-ai/app/services/context/deduplicator.py) - Tiered deduplication policy (Tiers 1, 2, and 3).
-*   `[NEW]` [app/services/context/prioritizer.py](../opsgraph-ai/app/services/context/prioritizer.py) - Configurable prioritization policy and tie-breaking sorter.
-*   `[NEW]` [app/services/context/budget.py](../opsgraph-ai/app/services/context/budget.py) - Bidirectional budget redistribution and oversized-item pruning policies.
-*   `[NEW]` [app/services/context/coverage.py](../opsgraph-ai/app/services/context/coverage.py) - Telemetry coverage analysis and deterministic gap/oversized reporting.
-*   `[NEW]` [app/services/context/builder.py](../opsgraph-ai/app/services/context/builder.py) - Orchestration pipeline and citation/provenance integrity verification.
-*   `[NEW]` [app/services/context/__init__.py](../opsgraph-ai/app/services/context/__init__.py) - Package exports.
-*   `[NEW]` [PROJECT_CONTEXT/CONTEXT_BUILDER_ARCHITECTURE.md](../opsgraph-ai/PROJECT_CONTEXT/CONTEXT_BUILDER_ARCHITECTURE.md) - Context builder architectural details and diagrams.
-*   `[NEW]` [tests/unit/test_context_builder.py](../opsgraph-ai/tests/unit/test_context_builder.py) - Expanded edge-case and determinism test suite.
+*   `[NEW]` [app/schemas/prompting.py](../opsgraph-ai/app/schemas/prompting.py) - Input message and request schemas.
+*   `[NEW]` [app/schemas/model_response.py](../opsgraph-ai/app/schemas/model_response.py) - Response and execution metadata schemas.
+*   `[NEW]` [prompts/rca/system_v1.txt](../opsgraph-ai/prompts/rca/system_v1.txt) - System prompt version 1 instructions.
+*   `[NEW]` [prompts/rca/investigation_v1.txt](../opsgraph-ai/prompts/rca/investigation_v1.txt) - User investigation prompt version 1 template.
+*   `[NEW]` [prompts/rca/critic_v1.txt](../opsgraph-ai/prompts/rca/critic_v1.txt) - Critic prompt version 1 template.
+*   `[NEW]` [app/services/prompting/templates.py](../opsgraph-ai/app/services/prompting/templates.py) - Dynamic versioned prompt registry.
+*   `[NEW]` [app/services/prompting/assembler.py](../opsgraph-ai/app/services/prompting/assembler.py) - Context assembly and injection safeguard service.
+*   `[NEW]` [app/services/prompting/__init__.py](../opsgraph-ai/app/services/prompting/__init__.py) - Prompting package index.
+*   `[NEW]` [app/services/guardrails/base.py](../opsgraph-ai/app/services/guardrails/base.py) - ABCs for input/output guards.
+*   `[NEW]` [app/services/guardrails/input_guard.py](../opsgraph-ai/app/services/guardrails/input_guard.py) - Input format, template, and leak guards.
+*   `[NEW]` [app/services/guardrails/output_guard.py](../opsgraph-ai/app/services/guardrails/output_guard.py) - JSON format and citation validator guards.
+*   `[NEW]` [app/services/guardrails/nemo_adapter.py](../opsgraph-ai/app/services/guardrails/nemo_adapter.py) - NeMo Guardrails adapter fallback shim.
+*   `[NEW]` [app/services/guardrails/__init__.py](../opsgraph-ai/app/services/guardrails/__init__.py) - Guardrails package index.
+*   `[NEW]` [app/services/gateway/errors.py](../opsgraph-ai/app/services/gateway/errors.py) - Provider-agnostic domain exceptions.
+*   `[NEW]` [app/services/gateway/provider.py](../opsgraph-ai/app/services/gateway/provider.py) - LLMProvider interface protocol.
+*   `[NEW]` [app/services/gateway/providers/groq_provider.py](../opsgraph-ai/app/services/gateway/providers/groq_provider.py) - Groq API client adapter.
+*   `[NEW]` [app/services/gateway/providers/gemini_provider.py](../opsgraph-ai/app/services/gateway/providers/gemini_provider.py) - Gemini API client adapter.
+*   `[NEW]` [app/services/gateway/providers/__init__.py](../opsgraph-ai/app/services/gateway/providers/__init__.py) - Providers package index.
+*   `[NEW]` [app/services/gateway/retry.py](../opsgraph-ai/app/services/gateway/retry.py) - Bounded retry exponential handler.
+*   `[NEW]` [app/services/gateway/gateway.py](../opsgraph-ai/app/services/gateway/gateway.py) - LLMGateway orchestrator.
+*   `[NEW]` [app/services/gateway/__init__.py](../opsgraph-ai/app/services/gateway/__init__.py) - Gateway package index.
+*   `[NEW]` [PROJECT_CONTEXT/LLM_GATEWAY_ARCHITECTURE.md](../opsgraph-ai/PROJECT_CONTEXT/LLM_GATEWAY_ARCHITECTURE.md) - LLM gateway architecture diagram and design.
+*   `[NEW]` [tests/unit/test_prompt_gateway.py](../opsgraph-ai/tests/unit/test_prompt_gateway.py) - Full Prompt Assembly, Guardrails, and LLM Gateway unit test suite.
 
 ### 3.2 Files Modified
-*   `[MODIFY]` [app/schemas/incident.py](../opsgraph-ai/app/schemas/incident.py) - Renamed old search-related `InvestigationContext` to `IncidentContext`.
-*   `[MODIFY]` [app/schemas/__init__.py](../opsgraph-ai/app/schemas/__init__.py) - Exported context schemas.
-*   `[MODIFY]` [README.md](../opsgraph-ai/README.md) - Updated Phase Roadmap Status.
+*   `[MODIFY]` [app/config.py](../opsgraph-ai/app/config.py) - Centralized Phase 7 timeout, retry, model, and fallback configuration settings.
+*   `[MODIFY]` [app/schemas/__init__.py](../opsgraph-ai/app/schemas/__init__.py) - Exported all prompting and response models.
+*   `[MODIFY]` [README.md](../opsgraph-ai/README.md) - Updated with Phase 7 roadmap implementation status.
 
 ---
 
-## 4. Context Builder Stabilization Features
+## 4. Phase 7 Architectural Decisions & Policies
 
-### 4.1 Cross-Bundle Scope Validation
-Verifies consistency across scenario and incident scopes. Rejects mismatched metadata properties immediately with `ContextScopeMismatchError`.
+### 4.1 Prompt Assembly & Injection Safeguards
+`PromptAssembler` compiles the context data. Supporting operational knowledge chunks are isolated inside structural `<untrusted_knowledge_context>` tags. System instructions explicitly inform the model to treat this context block strictly as data, neutralizing prompt injection attacks.
 
-### 4.2 Knowledge Evidence Reference Validation
-Ensures every evidence item referred to by the `KnowledgeBundle` matches a valid ID in the `EvidenceBundle`. Orphan or duplicate references trigger `ContextValidationError`.
+### 4.2 LLM Gateway Retry & Fallback
+The `LLMGateway` executes calls with a `BoundedRetryHandler` that only retries retryable exceptions (timeouts, connection drops, rate limits). If initial provider execution fails, the gateway automatically executes the call on the backup fallback provider (restricted to exactly 1 transition).
 
-### 4.3 Tiered Deduplication Policy
-*   **Tier 1 & Tier 2**: Deduplicates identical source keys and chunk IDs.
-*   **Tier 3**: Treats content-equivalent items from different documents/versions/sections as separate items, linking them with `content_equivalence_group` and `content_equivalent_to` metadata lists.
+### 4.3 Citation & Format Guardrails
+`DeterministicOutputGuard` parses the JSON output and asserts that every citation reference key maps exactly to a context reference in the request. Hallucinations cause a `CitationValidationError`.
 
-### 4.4 Bidirectional Budget Redistribution Policy
-*   *Pass 1*: Allocates candidates within initial category limits.
-*   *Pass 2*: Offers unused evidence budget to remaining knowledge candidates AND unused knowledge budget to remaining evidence candidates.
-
-### 4.5 Oversized-Item Exclusion
-*   Items exceeding initial category limits or the total context budget are excluded entirely (no partial truncation).
-*   Exclusions are recorded in `execution_metadata` and reported in `gap_summary` with the reason `OVERSIZED_ITEM_EXCLUDED`.
-
-### 4.6 Citation & Provenance Integrity Verification
-Validates maps to prevent orphan records or missing paths before packaging the final context model. Lineage traces are fully verified.
-
-### 4.7 Degraded-Mode Propagation
-Upstream execution state (mock embeddings, fallbacks, vector store mode) propagates to `InvestigationContext.execution_metadata` without mutation.
-
-### 4.8 Contradictory Evidence Retention
-Contradictory evidence is maintained in the `Contradictory Evidence` section. If budget limits force exclusion, a warning is added: `"Budget excluded contradictory evidence."`
+### 4.4 NeMo Guardrails Status
+*   **NeMo Integration**: Deferred. The package `nemoguardrails` does not compile natively on Windows under Python 3.14.0 due to dependency compiling issues. The gateway gracefully falls back to local `DeterministicInputGuard` and `DeterministicOutputGuard` and runs NeMo adapters in deferred mode.
+*   **Notice**: Enforce Python 3.11 environment standardization before installing NeMo in production.
 
 ---
 
 ## 5. Test & Verification Execution Ledger
 
 *   **Test Command**: `.\venv\Scripts\python.exe -m pytest tests/`
-*   **Total Tests Collected**: 66
-*   **Total Tests Passed**: 66
+*   **Total Tests Collected**: 78
+*   **Total Tests Passed**: 78
 *   **Total Tests Failed**: 0
 *   **Total Tests Skipped**: 0
 
-The 16 Context Builder unit tests verify valid/invalid input combinations, normalization, deterministic ID hashes, duplicate merges, priority scoring components, bidirectional budget redistributions, citation traces, and gap warnings.
+The 12 new Prompt & Gateway tests verify versioned assembly, injection boundaries, timeout/rate-limit retry policies, Groq/Gemini response normalization, provider fallback routes, and citation/secret guards. Mock SDK clients are used to avoid paid network charges.
 
 ---
 
 ## 6. Technical Debt, Future Enhancements, and Constraints
-
-### 6.1 Current Technical Debt
-*   **Word-Count Estimations**: Budget cost is approximated using word counts.
-
-### 6.2 Future Enhancements
-*   **Tiktoken Integration**: Standardize on a tokenizer (such as tiktoken) for exact token counts once downstream LLM models are selected in Phase 7.
-
-### 6.3 Known Constraints
-*   **Deterministic Only**: The builder performs zero LLM, template parsing, or routing operations.
+*   **Token Calculations**: Tiktoken or model-native tokenizers should replace basic word-count estimators once models are locked in production.
 
 ---
 
 ## 7. Future Phase Boundaries
 
-### 7.1 Phase 7 Provider-Agnostic Gateway Boundary
-Downstream prompt assembly and LLM execution will go through a provider-agnostic LLM Gateway interface with distinct model adapters:
-*   *Groq Adapter*: Initial target implementation.
-*   *Gemini, OpenAI, Local adapters*: Reserved as future extensions.
-*   *Safety Rails*: NVIDIA NeMo Guardrails will handle input/output gating at a separate boundary.
-*   *Notice*: Verify library compatibility under python standard environments (Python 3.11 recommended) before installation.
+### 7.1 Phase 8 LangGraph Boundary
+The future Phase 8 layer will use LangGraph to orchestrate state machines, cyclical planning, autonomous tool usage, and reflection loops. The Prompt Assembly and Gateway layers remain completely isolated from state management.
 
 ---
 
 ## 8. Exit Checklist
 
-*   `[x]` **Branch Name Verified**: Active on `feature/phase-6-context-builder`.
-*   `[x]` **InvestigationContext Immutable**: Enforced by frozen Pydantic models.
-*   `[x]` **No LLM usage**: Builder is 100% deterministic.
-*   `[x]` **All 66 Tests Pass**: Pytest suite reports 100% success.
-*   `[x]` **No Phase 7 Leakage**: No gateway, guardrails, or prompt files created.
+*   `[x]` **Branch Name Verified**: Active on `feature/phase-7-prompt-guardrails-gateway`.
+*   `[x]` **LLM Provider Agnostic**: Gateways communicate via the `LLMProvider` protocol.
+*   `[x]` **All 78 Tests Pass**: Pytest suite reports 100% success.
+*   `[x]` **No LangGraph Implementation**: No Graph state, nodes, or edges created.
