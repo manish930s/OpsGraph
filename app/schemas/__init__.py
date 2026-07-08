@@ -1,5 +1,5 @@
 from app.schemas.common import TimeWindow
-from app.schemas.incident import IncidentCreate, IncidentRecord, IncidentSummary, InvestigationContext
+from app.schemas.incident import IncidentCreate, IncidentRecord, IncidentSummary, IncidentContext
 from app.schemas.telemetry import (
     LogRecord,
     MetricPoint,
@@ -26,13 +26,24 @@ from app.schemas.knowledge import (
     RetrievalChannelProvenance,
     RetrievalExecutionMetadata,
 )
+from app.schemas.context import (
+    ContextItem,
+    CitationInfo,
+    ProvenanceInfo,
+    ContextBudgetSummary,
+    ContextCoverageSummary,
+    ContextGapSummary,
+    ContextExecutionMetadata,
+    ContextSection,
+    InvestigationContext,
+)
 
 __all__ = [
     "TimeWindow",
     "IncidentCreate",
     "IncidentRecord",
     "IncidentSummary",
-    "InvestigationContext",
+    "IncidentContext",
     "LogRecord",
     "MetricPoint",
     "TraceSpan",
@@ -60,5 +71,14 @@ __all__ = [
     "KnowledgeBundle",
     "RetrievalChannelProvenance",
     "RetrievalExecutionMetadata",
+    "ContextItem",
+    "CitationInfo",
+    "ProvenanceInfo",
+    "ContextBudgetSummary",
+    "ContextCoverageSummary",
+    "ContextGapSummary",
+    "ContextExecutionMetadata",
+    "ContextSection",
+    "InvestigationContext",
 ]
 

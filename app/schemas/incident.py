@@ -38,7 +38,7 @@ class IncidentSummary(BaseModel):
     severity: Severity
     status: str
 
-class InvestigationContext(BaseModel):
+class IncidentContext(BaseModel):
     incident_id: str
     candidate_services: list[str]
     severity: Severity
