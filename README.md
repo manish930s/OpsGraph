@@ -15,22 +15,41 @@ A production-grade, enterprise-level RAG system built with **LangGraph**, **Port
 
 ---
 
-## Agent Intelligence Flow
+## High-Level Architecture & Roadmap
+
+The OpsGraph AI system is divided into modular phases. Below is the technical dataflow and implementation status:
 
 ```mermaid
 graph TD
-    User((User)) --> UI[Streamlit UI]
-    UI --> API[FastAPI /query]
-    API --> Guard{NeMo Guardrails}
-    Guard -->|Blocked| UI
-    Guard -->|Pass| Planner{Planner Node}
-    Planner -->|Conversational| Responder[Responder Node]
-    Planner -->|Technical| Retriever[Retriever Node]
-    Retriever --> Reranker[FlashRank Local Reranker]
-    Reranker --> Responder
-    Responder --> UI
-    Responder -.-> Memory[(LangGraph MemorySaver)]
+    Incident[📋 Incident and Telemetry] -->|Ingested| Repos[🗄️ Telemetry Repositories]
+    Repos -->|Traced| Tools[🛠️ Investigation Tools]
+    Tools -->|Analyzed| Grounding[🔍 Evidence Grounding]
+    Grounding -->|Contextualized| Knowledge[📚 Knowledge Layer]
+    Knowledge -->|Constructed| ContextBuilder[🧩 Context Builder]
+    ContextBuilder -->|Assembled| Prompt[✉️ Prompt Assembly + Guardrails + Gateway]
+    Prompt -->|Orchestrated| Engine[🤖 LangGraph Investigation Engine]
+    Engine -->|Served| API[⚡ API]
+    API -->|Rendered| UI[🖥️ UI]
+
+    classDef implemented fill:#2ecc71,stroke:#27ae60,color:#fff;
+    classDef planned fill:#3498db,stroke:#2980b9,color:#fff;
+    
+    class Repos,Tools,Grounding,Knowledge implemented;
+    class ContextBuilder,Prompt,Engine,API,UI planned;
 ```
+
+### Phase Roadmap Status
+*   **Phase 1**: Foundations & Schemas — **[IMPLEMENTED]**
+*   **Phase 2**: Telemetry Repository Layer — **[IMPLEMENTED]**
+*   **Phase 3**: Investigation Tool Layer — **[IMPLEMENTED]**
+*   **Phase 4**: Evidence Grounding Layer — **[IMPLEMENTED]**
+*   **Phase 5**: Enterprise Knowledge Layer (RAG) — **[IMPLEMENTED & STABILIZED]**
+*   **Phase 6**: Context Builder — **[PLANNED]**
+*   **Phase 7**: Prompt Assembly + NeMo Guardrails + LLM Gateway — **[PLANNED]**
+*   **Phase 8**: LangGraph Investigation Engine — **[PLANNED]**
+*   **Phase 9**: FastAPI — **[PLANNED]**
+*   **Phase 10**: Streamlit UI — **[PLANNED]**
+*   **Phase 11**: Evaluation + Docker + Portfolio Release — **[PLANNED]**
 
 ---
 
