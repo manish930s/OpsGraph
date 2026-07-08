@@ -12,6 +12,9 @@ class ToolRegistry:
         """
         Registers a tool instance in the registry catalog.
         """
+        if tool.name in self._tools:
+            from app.common.exceptions import ValidationError
+            raise ValidationError(f"Tool '{tool.name}' is already registered.")
         self._tools[tool.name] = tool
 
     def get_tool(self, name: str) -> BaseTool:

@@ -1,5 +1,5 @@
 # OpsGraph AI — Phase Migration Report
-**Document Status:** Finalized (Phase 3 Complete)  
+**Document Status:** Finalized (Phase 3 Stabilization Complete)  
 **Reporting Phase:** Phase 3: Investigation Tool Layer  
 **Execution Date:** 2026-07-08  
 **Lead Engineer:** Antigravity (AI Coding Assistant)  
@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-Phase 3 (Investigation Tool Layer) of the OpsGraph AI migration is complete. We designed, implemented, and verified the deterministic, read-only investigation tool layer. Seven diagnostic tools have been built to expose and format telemetry data. A central `ToolRegistry` compiles the tools, exposing schemas for future LangGraph execution. All tools are decoupled from LLMs, routing, or agent orchestrations. The full test suite runs successfully with 34 passing tests.
+Phase 3 (Investigation Tool Layer) of the OpsGraph AI migration is complete and stabilized. We designed, implemented, and verified the deterministic, read-only investigation tool layer. Seven diagnostic tools have been built to expose and format telemetry data. A central `ToolRegistry` compiles the tools, exposing schemas for future LangGraph execution. All tools are decoupled from LLMs, routing, or agent orchestrations. The full test suite runs successfully with 35 passing tests.
 
 ---
 
@@ -18,7 +18,7 @@ All file paths listed below are relative to the target codebase root `opsgraph-a
 
 ### 2.1 Files Created
 *   `[NEW]` [app/tools/base.py](../opsgraph-ai/app/tools/base.py) - Abstract `BaseTool` class executing structured logging, duration measurement, and validation.
-*   `[NEW]` [app/tools/registry.py](../opsgraph-ai/app/tools/registry.py) - Catalogs registered tools and exports JSON schemas.
+*   `[NEW]` [app/tools/registry.py](../opsgraph-ai/app/tools/registry.py) - Catalogs registered tools, detects duplicate registrations, and exports JSON schemas.
 *   `[NEW]` [app/tools/log_tool.py](../opsgraph-ai/app/tools/log_tool.py) - `LogSearchTool` querying and filtering log messages.
 *   `[NEW]` [app/tools/metric_tool.py](../opsgraph-ai/app/tools/metric_tool.py) - `MetricAnalysisTool` managing metrics aggregations and temporal gaps.
 *   `[NEW]` [app/tools/trace_tool.py](../opsgraph-ai/app/tools/trace_tool.py) - `TraceInspectionTool` building trace hierarchy dependency trees.
@@ -93,13 +93,14 @@ All tools extend [BaseTool](../opsgraph-ai/app/tools/base.py) and expose their e
 We ran the test suite using `python -m pytest tests/` with the python environment inside the virtualenv `venv` directory.
 
 ### 4.1 Test Run Status
-*   **Total Tests Executed**: 34
-*   **Total Tests Passed**: 34
+*   **Total Tests Executed**: 35
+*   **Total Tests Passed**: 35
 *   **Total Tests Failed**: 0
 
 ### 4.2 Executed Tool Test Categories
 1.  **Tool Registry Integrity (`test_tools.py`)**:
-    *   `test_registry_lookup`: Asserts correct tool listing, retrieval, schema generations, and checks `ToolNotFoundError` handling.
+    *   `test_registry_lookup`: Asserts correct tool listing, retrieval, schema generations, checks `ToolNotFoundError` handling, and asserts duplicate registration blocks.
+    *   `test_evaluation_isolation`: Asserts runtime tools do not query or leak `golden.json` records.
 2.  **Incident Inspection**:
     *   `test_incident_summary_tool`: Exercises loading standard incident cases and raises validation errors for mismatched IDs.
 3.  **Log Queries**:
@@ -120,7 +121,8 @@ We ran the test suite using `python -m pytest tests/` with the python environmen
 ## 5. Architectural Decisions & Deviations
 
 *   **Registry Factory**: Defined `create_default_registry()` in `app/tools/__init__.py` to act as the primary bootstrapper, allowing runtime instances to compile all tools with explicit repository dependencies.
-*   **Structured Invocation Logging**: Embedded automatic duration parsing and output status logging directly inside `BaseTool.execute()`. This ensures that all future tool invocations are audited uniformly for latency and outcomes.
+*   **Structured Invocation Logging**: Embedded automatic duration parsing and output status logging directly inside `BaseTool.execute()`. Observability telemetry (such as custom tracers) should migrate to a dedicated observability layer in a future phase rather than expanding `BaseTool` now.
+*   **Evaluation Isolation**: Ensured that the runtime directory is strictly partitioned from evaluation metrics data (`golden.json`). Added explicit unit tests to assert that `golden.json` is not queried during normal tool executions.
 
 ---
 
@@ -139,7 +141,7 @@ We ran the test suite using `python -m pytest tests/` with the python environmen
 
 ## 7. Execution Roadmap (Phases 4 to 10)
 
-1.  **Phase 4**: Evidence Grounding Layer (evidence aggregation and deterministic validator)
+1.  **Phase 4**: Evidence Grounding Layer (sub-responsibilities: **Evidence Normalization**, **Evidence Aggregation**, **Evidence Deduplication**, **Evidence Confidence Calculation**, **Evidence Validation**, and **Evidence Packaging**)
 2.  **Phase 5**: Knowledge Ingestion + Qdrant + FlashRank (RAG vector pipeline and reranker)
 3.  **Phase 6**: LLM Gateway + NeMo Guardrails (Centralized model routing and input/output safety)
 4.  **Phase 7**: LangGraph Investigation Engine (10-node state machine and routing paths)
@@ -154,13 +156,13 @@ We ran the test suite using `python -m pytest tests/` with the python environmen
 ### 8.1 Repository Revision
 *   **Active Branch**: `feature/phase-3-investigation-tools`
 *   **Refactoring Date**: 2026-07-08
-*   **Execution Workspace**: `d:/Advance RAG`
+*   **Execution Workspace**: `opsgraph-ai/`
 
 ### 8.2 Phase 3 Exit Checklist
 
 *   `[x]` **Tool Interfaces Compile**: Interfaces compile and assert typed schemas.
 *   `[x]` **No Business RCA Logic in Tools**: Tools are strictly deterministic queries.
 *   `[x]` **Structured Logging Verified**: execution times and outcomes are logged.
-*   `[x]` **All 34 Tests Pass**: Pytest suite reports 100% success.
+*   `[x]` **All 35 Tests Pass**: Pytest suite reports 100% success.
 *   `[x]` **Feature Branch Created**: Active on `feature/phase-3-investigation-tools`.
 *   `[x]` **No Phase 4 Leakage**: No vector database or model gateway code has been created.

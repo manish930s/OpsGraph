@@ -70,6 +70,39 @@ def test_registry_lookup(registry):
     assert "log_pattern_search" in schemas
     assert schemas["log_pattern_search"]["name"] == "log_pattern_search"
 
+    # Duplicate registration check
+    with pytest.raises(ValidationError):
+        registry.register(registry.get_tool("log_pattern_search"))
+
+def test_evaluation_isolation(repo_bundle, registry):
+    # Ensure runtime tools never load golden.json cases
+    original_load = repo_bundle["scenario_repo"].load_golden_case
+    def mock_load_golden():
+        raise RuntimeError("Access denied to golden.json inside runtime tool executions")
+    repo_bundle["scenario_repo"].load_golden_case = mock_load_golden
+
+    try:
+        # Run all registered tools to verify they do not invoke the mock
+        for tool in registry.list_tools():
+            if tool.name == "log_pattern_search":
+                tool.run()
+            elif tool.name == "metric_window_analysis":
+                tool.run(metric_name="db_pool_active")
+            elif tool.name == "trace_dependency_analysis":
+                spans = repo_bundle["trace_repo"].get_spans()
+                tool.run(trace_id=spans[0].trace_id)
+            elif tool.name == "deployment_event_search":
+                tool.run()
+            elif tool.name == "service_topology_lookup":
+                tool.run(service_id="checkout-service")
+            elif tool.name == "incident_summary_lookup":
+                tool.run()
+            elif tool.name == "time_window_adjuster":
+                tool.run(start="2026-01-15T14:00:00Z", end="2026-01-15T14:10:00Z")
+    finally:
+        repo_bundle["scenario_repo"].load_golden_case = original_load
+
+
 # --- 2. IncidentSummaryTool Tests ---
 
 def test_incident_summary_tool(repo_bundle):
