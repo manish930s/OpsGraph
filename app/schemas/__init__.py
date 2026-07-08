@@ -19,6 +19,7 @@ from app.schemas.evidence import (
 )
 from app.schemas.planning import PlanStep, InvestigationPlan, ToolFailure
 from app.schemas.rca import Hypothesis, Confidence, RecommendedAction, RCAResponse, GroundTruthLabels, GoldenCase
+from app.schemas.knowledge import KnowledgeDocument, KnowledgeChunk, KnowledgeBundle
 
 __all__ = [
     "TimeWindow",
@@ -48,5 +49,8 @@ __all__ = [
     "RCAResponse",
     "GroundTruthLabels",
     "GoldenCase",
+    "KnowledgeDocument",
+    "KnowledgeChunk",
+    "KnowledgeBundle",
 ]
 
