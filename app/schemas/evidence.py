@@ -33,3 +33,19 @@ class Evidence(BaseModel):
             raise ValueError(f"Evidence ID must follow the standard <SOURCE>-EV-<SCENARIO>-<SEQ> format: {v}")
         return v
 
+
+class ConfidenceSummary(BaseModel):
+    score: float
+    band: str
+    explanation: list[str] = Field(default_factory=list)
+
+
+class EvidenceBundle(BaseModel):
+    schema_version: str = Field(default="1.0")
+    evidence_list: list[Evidence] = Field(default_factory=list)
+    timeline: list[Evidence] = Field(default_factory=list)
+    confidence_summary: ConfidenceSummary
+    validation_status: str
+    coverage_summary: dict[str, list[str]] = Field(default_factory=dict)
+
+

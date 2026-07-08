@@ -9,7 +9,7 @@ from app.schemas.telemetry import (
     TopologyEdge,
     ServiceTopology,
 )
-from app.schemas.evidence import Evidence, EvidenceProvenance, EvidenceRetrievalMetadata
+from app.schemas.evidence import Evidence, EvidenceProvenance, EvidenceRetrievalMetadata, ConfidenceSummary, EvidenceBundle
 from app.schemas.planning import PlanStep, InvestigationPlan, ToolFailure
 from app.schemas.rca import Hypothesis, Confidence, RecommendedAction, RCAResponse, GroundTruthLabels, GoldenCase
 
@@ -29,6 +29,8 @@ __all__ = [
     "Evidence",
     "EvidenceProvenance",
     "EvidenceRetrievalMetadata",
+    "ConfidenceSummary",
+    "EvidenceBundle",
     "PlanStep",
     "InvestigationPlan",
     "ToolFailure",
