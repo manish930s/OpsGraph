@@ -1,6 +1,6 @@
 # OpsGraph AI — Phase Migration Report
-**Document Status:** Finalized (Phase 5 Closeout Complete)  
-**Reporting Phase:** Phase 5: Enterprise Knowledge Layer (RAG)  
+**Document Status:** Finalized (Phase 6 Complete)  
+**Reporting Phase:** Phase 6: Deterministic Context Builder  
 **Execution Date:** 2026-07-08  
 **Lead Engineer:** Antigravity (AI Coding Assistant)  
 
@@ -8,12 +8,12 @@
 
 ## 1. Executive Summary
 
-Phase 5 (Enterprise Knowledge Layer) of the OpsGraph AI migration is complete and stabilized. We implemented a genuine hybrid retrieval pipeline containing independent dense similarity search and lexical (BM25) search channels, fused candidate outputs using Reciprocal Rank Fusion (RRF), integrated FlashRank cross-encoders with a deterministic local Jaccard word-overlap fallback, and configured a `SentenceTransformerEmbeddingProvider` (with a local `MockEmbeddingProvider` fallback). The system dynamically evaluates and reports fallback transitions via typed execution metadata. The full test suite runs successfully with 50 passing tests.
+Phase 6 (Deterministic Context Builder) of the OpsGraph AI migration is complete and verified. We built the Context Builder service, which deterministically validates, normalizes, deduplicates, prioritizes, budgets, and packages evidence and knowledge bundles into a canonical, immutable `InvestigationContext`. All scoring, selection, and limit checks are 100% deterministic and execute without LLM calls or prompt templates. The full test suite runs successfully with 58 passing tests.
 
 ---
 
 ## 2. Repository Revision & Git Status
-*   **Active Branch**: `feature/phase-5-knowledge-layer` (Verified using Git CLI)
+*   **Active Branch**: `feature/phase-6-context-builder` (Verified using Git CLI)
 *   **Refactoring Date**: 2026-07-08
 *   **Execution Workspace**: `opsgraph-ai/`
 *   **Working Directory State**: Clean (nothing to commit, working tree clean)
@@ -25,125 +25,97 @@ Phase 5 (Enterprise Knowledge Layer) of the OpsGraph AI migration is complete an
 All file paths listed below are relative to the target codebase root `opsgraph-ai/`.
 
 ### 3.1 Files Created
-*   `[NEW]` [app/schemas/knowledge.py](../opsgraph-ai/app/schemas/knowledge.py) - Frozen Pydantic schemas for `KnowledgeDocument`, `KnowledgeChunk`, `RetrievalChannelProvenance`, `RetrievalExecutionMetadata`, and `KnowledgeBundle`.
-*   `[NEW]` [app/services/knowledge/base_embedding.py](../opsgraph-ai/app/services/knowledge/base_embedding.py) - Decoupled embedding interfaces, Mock generator, and the new `SentenceTransformerEmbeddingProvider`.
-*   `[NEW]` [app/services/knowledge/vector_store_base.py](../opsgraph-ai/app/services/knowledge/vector_store_base.py) - Abstract vector store adapter interface.
-*   `[NEW]` [app/services/knowledge/qdrant_adapter.py](../opsgraph-ai/app/services/knowledge/qdrant_adapter.py) - Qdrant adapter with transparent UUID mapping and local in-memory fallback.
-*   `[NEW]` [app/services/knowledge/loader.py](../opsgraph-ai/app/services/knowledge/loader.py) - Yaml front-matter loader parsing operational guides and runbooks.
-*   `[NEW]` [app/services/knowledge/chunker.py](../opsgraph-ai/app/services/knowledge/chunker.py) - Heading-aware structural splitted chunker.
-*   `[NEW]` [app/services/knowledge/lexical.py](../opsgraph-ai/app/services/knowledge/lexical.py) - BM25 lexical search channel.
-*   `[NEW]` [app/services/knowledge/fusion.py](../opsgraph-ai/app/services/knowledge/fusion.py) - Reciprocal Rank Fusion (RRF) deduplication and rank-merging step.
-*   `[NEW]` [app/services/knowledge/reranker.py](../opsgraph-ai/app/services/knowledge/reranker.py) - FlashRank reranker with local Jaccard fallback.
-*   `[NEW]` [app/services/knowledge/cache.py](../opsgraph-ai/app/services/knowledge/cache.py) - In-memory embedding and search result cacher.
-*   `[NEW]` [app/services/knowledge/retriever.py](../opsgraph-ai/app/services/knowledge/retriever.py) - Hybrid search retrieval coordinator.
-*   `[NEW]` [app/services/knowledge/__init__.py](../opsgraph-ai/app/services/knowledge/__init__.py) - Package exports.
-*   `[NEW]` [PROJECT_CONTEXT/KNOWLEDGE_LAYER_ARCHITECTURE.md](../opsgraph-ai/PROJECT_CONTEXT/KNOWLEDGE_LAYER_ARCHITECTURE.md) - Design documentation of RAG workflows and contracts.
-*   `[NEW]` [PROJECT_CONTEXT/ADR-001-PYTHON-VERSION.md](../opsgraph-ai/PROJECT_CONTEXT/ADR-001-PYTHON-VERSION.md) - Architectural Decision Record for Python Runtime compatibility.
-*   `[NEW]` [tests/unit/test_knowledge_layer.py](../opsgraph-ai/tests/unit/test_knowledge_layer.py) - Ingestion, chunking, filters, and retriever test suites.
+*   `[NEW]` [app/schemas/context.py](../opsgraph-ai/app/schemas/context.py) - Canonical ContextItem and InvestigationContext schemas.
+*   `[NEW]` [app/services/context/exceptions.py](../opsgraph-ai/app/services/context/exceptions.py) - Domain exceptions (`ContextValidationError`, `ContextScopeMismatchError`, `ContextBudgetError`).
+*   `[NEW]` [app/services/context/identity.py](../opsgraph-ai/app/services/context/identity.py) - Deterministic SHA-256 ID generator.
+*   `[NEW]` [app/services/context/validator.py](../opsgraph-ai/app/services/context/validator.py) - Input bundle verification layer.
+*   `[NEW]` [app/services/context/normalizer.py](../opsgraph-ai/app/services/context/normalizer.py) - Canonical parser methods.
+*   `[NEW]` [app/services/context/deduplicator.py](../opsgraph-ai/app/services/context/deduplicator.py) - Alphanumeric and content-hash duplicate merger.
+*   `[NEW]` [app/services/context/prioritizer.py](../opsgraph-ai/app/services/context/prioritizer.py) - Configurable prioritization policy and tie-breaking sorter.
+*   `[NEW]` [app/services/context/budget.py](../opsgraph-ai/app/services/context/budget.py) - Budget estimators and unused allocation redistributors.
+*   `[NEW]` [app/services/context/coverage.py](../opsgraph-ai/app/services/context/coverage.py) - Telemetry coverage analysis and deterministic gap reporting.
+*   `[NEW]` [app/services/context/builder.py](../opsgraph-ai/app/services/context/builder.py) - Main orchestrator pipeline.
+*   `[NEW]` [app/services/context/__init__.py](../opsgraph-ai/app/services/context/__init__.py) - Package exports.
+*   `[NEW]` [PROJECT_CONTEXT/CONTEXT_BUILDER_ARCHITECTURE.md](../opsgraph-ai/PROJECT_CONTEXT/CONTEXT_BUILDER_ARCHITECTURE.md) - Context builder architectural details and diagrams.
+*   `[NEW]` [tests/unit/test_context_builder.py](../opsgraph-ai/tests/unit/test_context_builder.py) - Validation, normalization, scoring, budgeting, and coverage test suite.
 
 ### 3.2 Files Modified
-*   `[MODIFY]` [app/schemas/__init__.py](../opsgraph-ai/app/schemas/__init__.py) - Exported knowledge schemas.
-*   `[MODIFY]` [requirements.txt](../opsgraph-ai/requirements.txt) - Cleaned up and categorized dependencies.
-*   `[MODIFY]` [app/config.py](../opsgraph-ai/app/config.py) - Added configuration-driven parameters for embedding models, devices, and providers.
-*   `[MODIFY]` [README.md](../opsgraph-ai/README.md) - Updated with high-level architecture diagram and roadmap phase status.
+*   `[MODIFY]` [app/schemas/incident.py](../opsgraph-ai/app/schemas/incident.py) - Renamed old search-related `InvestigationContext` to `IncidentContext` to free the namespace.
+*   `[MODIFY]` [app/schemas/__init__.py](../opsgraph-ai/app/schemas/__init__.py) - Exported all new context schemas.
+*   `[MODIFY]` [README.md](../opsgraph-ai/README.md) - Updated with Phase 6 implementation status.
 
 ---
 
-## 4. In-Depth Architecture Implementation
+## 4. Context Builder Components & Flow
 
-The stabilized Knowledge Layer implements the following RAG components and data flows:
+The Context Builder implements the following sub-responsibilities:
 
-### 4.1 Ingestion Flow
-Loads Markdown documents and extracts Yaml front matter containing document ID, tags, title, version, and type. It compiles it into a structured `KnowledgeDocument`.
-The `HeadingAwareChunker` partitions documents based on markdown structural headings (like `# Symptoms`, `# Investigation Steps`), ensuring section context is preserved. Chunks inherit parent metadata.
+### 4.1 Input Validation
+Verifies scenario and incident ID consistency across the `EvidenceBundle`. Rejects cross-scenario requests or incompatible incidents by raising `ContextScopeMismatchError`.
 
-### 4.2 Dense Retrieval Channel
-Computes queries using cached vector representations generated by `EmbeddingProvider`. Queries are run over Qdrant using the `QdrantVectorStoreAdapter` applying service scope metadata filters.
-*   **UUID Transposition**: Since Qdrant enforces string IDs to be valid UUIDs, the adapter implements a deterministic `uuid.uuid5` generator mapping chunk strings, storing original IDs inside payload maps.
+### 4.2 Deterministic Identity & Normalizer
+Converts evidence and knowledge items to canonical `ContextItem` models. Assigns deterministic SHA-256 item IDs computed on the scope and source ID to prevent random UUID generation.
 
-### 4.3 BM25 Lexical Retrieval Channel
-A local `BM25LexicalRetriever` indexes chunks during document ingestion. It matches exact query term frequencies ($TF$) and inverse document frequencies ($IDF$) normalized by document lengths, applying the exact same metadata filters.
+### 4.3 Deduplication Strategy
+Aggregates duplicate items by stable source keys `(source_kind, source_id)` and content text hashes. Merges metadata and records the highest priority and retrieval scores.
 
-### 4.4 Reciprocal Rank Fusion (RRF)
-Combines dense and lexical results using the standard rank-reciprocal algorithm:
-$$RRF(d) = \sum_{c \in C} \frac{1}{k + rank_c(d)}$$
-Deduplicates chunks by stable identity and stores explicit provenance tracking (original ranks, scores, and active channels).
+### 4.4 Configurable Priority Scoring
+Calculates priorities using a weight-based policy:
+*   *Evidence*: Computes scores based on confidence, source reliability, and contradiction penalties.
+*   *Knowledge*: Computes scores based on rerank relevance, fusion scores, and service scope alignment.
+Stable tie-breaker: descending priority score, then ascending source ID.
 
-### 4.5 Reranking & Fallback
-Fused candidates are reranked using FlashRank. If FlashRank is not installed or fails at runtime, a Jaccard word-overlap matching fallback executes.
+### 4.5 Budget Management & Allocation
+Partitions the total budget into evidence, knowledge, and reserved overhead limits. Processes evidence first, and **automatically redistributes unused evidence allocation to the knowledge allocation** for sparse incidents. Prunes low-priority candidates that exceed the limits.
 
----
+### 4.6 Citation & Provenance Preservations
+*   *Citations*: Maps selected items to their source origin parameters (telemetry records for evidence, document paths/sections/versions for runbooks).
+*   *Provenance*: Traces the complete dataflow lineage from raw files/events down to the finalized context item.
 
-## 5. Runtime & Degraded Mode Signaling
+### 4.7 Section Organization
+Groups items into typed lists: `Critical Evidence`, `Supporting Evidence`, `Contradictory Evidence`, `Relevant Runbooks`, `Relevant Operational Knowledge`, `Topology Context`, and `Deployment Context`.
 
-To prevent silent failures in production, the retriever attaches a `RetrievalExecutionMetadata` status report to each `KnowledgeBundle` containing:
-*   `vector_store_mode`: `"qdrant"` or `"memory"`
-*   `embedding_mode`: `"sentence-transformer"` or `"mock"`
-*   `reranker_mode`: `"flashrank"` or `"lexical-fallback"`
-*   `degraded_mode`: `True` if any fallback occurred (e.g. mock embedding or memory vector database)
-*   `fallback_reasons`: Structured string warnings explaining why degraded status was engaged.
+### 4.8 Coverage & Gap Analysis
+Computes coverage across 8 telemetry/knowledge categories. Dynamically reports gaps (like missing trace evidence, empty runbooks, or degraded retrievals) using rule-based metrics.
 
 ---
 
-## 6. Dependency & Python Version Strategy Review
-
-### 6.1 Python Runtime Status
-*   **Local Development Version**: Python 3.14.0 (Windows Sandbox)
-*   **Production/Docker Target**: Python 3.11 (`FROM python:3.11-slim-bookworm`)
-*   **Compatibility Risks**: Python 3.14 lacks pre-compiled wheels for heavy production dependencies such as `nemoguardrails`, `deepeval`, `ragas`, `torch`, and `langfuse`.
-*   **Decision (ADR-001)**: Maintain the current dual-setup for Phase 5 closeout. Before beginning Phase 7, the engineering team must select and standardize a single supported Python runtime (recommended: **Python 3.11**) for both local development and production to align dependency packages natively.
-
-### 6.2 Dependency Segregation
-The `requirements.txt` file has been cleanly refactored into:
-1.  **Current Runtime Dependencies**: `fastapi`, `uvicorn`, `python-dotenv`, `requests`, `numpy`, `pytz`, `pydantic>=2.0.0`, `qdrant-client`, `flashrank`, `sentence-transformers`, `langchain`, `langchain-community`.
-2.  **Current Development/Test Dependencies**: `pytest`, `anyio`, `nest-asyncio`, `loguru`.
-3.  **Future Phase Dependencies** (Commented out): `nemoguardrails` (Phase 7), `portkey-ai` (Phase 7), `ragas` (Phase 11), `deepeval` (Phase 11), `langfuse` (Phase 11).
-
----
-
-## 7. Cache Policy
-*   *Current*: Volatile in-memory cache (`KnowledgeCache`) caching embedding lists and retrieval search outputs.
-*   *Safe Future Options*: Prohibit pickle serialization for persistent caches. Recommended future options: SQLite or JSON.
-*   *Constraints*: No caching of secrets, templates, prompts, or future LLM outputs.
-
----
-
-## 8. Test Execution Ledger
+## 5. Test & Verification Execution Ledger
 
 *   **Test Command**: `.\venv\Scripts\python.exe -m pytest tests/`
-*   **Total Tests Collected**: 50
-*   **Total Passed**: 50
-*   **Total Failed**: 0
-*   **Total Skipped**: 0
-*   **Warnings**: Zero related to active code.
+*   **Total Tests Collected**: 58
+*   **Total Tests Passed**: 58
+*   **Total Tests Failed**: 0
+*   **Total Tests Skipped**: 0
 
-All 50 unit tests run successfully, verifying loaders, heading chunkers, Mock/ST embedding providers, local BM25 indexing, Reciprocal Rank Fusion, Qdrant adapters, degraded execution statuses, and Pydantic immutability checks.
-
----
-
-## 9. Future Phase Boundaries & Roadmap
-
-### 9.1 Context Builder Boundary (Phase 6)
-The future Context Builder will be responsible for:
-*   Combining the validated `EvidenceBundle` (Phase 4) and the `KnowledgeBundle` (Phase 5).
-*   Enforcing strict context budgets (token limit pruning).
-*   Removing duplicate context items and prioritizing relevant evidence citations.
-*   Compiling a structured `InvestigationContext`.
-It must not implement LLM queries, prompt templates, guardrails, or LangGraph.
-
-### 9.2 Prompt Assembly, Gateway & Guardrails Boundary (Phase 7)
-*   **Prompt Assembly**: Consumes `InvestigationContext` and applies XML templates to generate messages. Decoupled from gateway transport and LangGraph nodes.
-*   **NeMo Guardrails**: Gates inputs and outputs.
-*   **LLM Gateway**: Centralized routing, load-balancing, and failover using Groq api keys.
+The 8 new Context Builder unit tests verify valid/invalid input combinations, normalization, deterministic ID hashes, duplicate merges, priority scoring components, unused budget redistributions, citation traces, and gap warnings.
 
 ---
 
-## 10. Exit Checklist
+## 6. Technical Debt, Future Enhancements, and Constraints
 
-*   `[x]` **Branch Naming Consistent**: Verified as `feature/phase-5-knowledge-layer`.
-*   `[x]` **Genuine Hybrid Search**: Dense vector + BM25 Lexical + Reciprocal Rank Fusion (RRF) are active.
-*   `[x]` **Degraded Mode Visibility**: Execution metadata exposes degraded flags.
-*   `[x]` **All 50 Tests Pass**: Pytest suite reports 100% success.
-*   `[x]` **No Phase 6 Leakage**: No gateway or routing code has been created.
-*   `[x]` **No Pickle Persistent Recommendations**: Cache policy documentation updated.
-*   `[x]` **ADR-001 Python version created**: Risks documented.
+### 6.1 Current Technical Debt
+*   **Word-Count Estimations**: Budget cost is approximated using word counts.
+
+### 6.2 Future Enhancements
+*   **Tiktoken Integration**: Standardize on a tokenizer (such as tiktoken) for exact token counts once downstream LLM models are selected in Phase 7.
+
+### 6.3 Known Constraints
+*   **Deterministic Only**: The builder performs zero LLM, template parsing, or routing operations.
+
+---
+
+## 7. Future Phase Boundaries
+
+### 7.1 Phase 7 Boundary
+The future Phase 7 layer will consume the immutable `InvestigationContext` to perform Prompt Assembly, configure input/output NVIDIA NeMo Guardrails, and configure unified Groq model routes via the LLM Gateway. Large inline prompts are prohibited inside LangGraph nodes.
+
+---
+
+## 8. Exit Checklist
+
+*   `[x]` **Branch Name Verified**: Active on `feature/phase-6-context-builder`.
+*   `[x]` **InvestigationContext Immutable**: Frozen models enforce immutability.
+*   `[x]` **No LLM usage**: Builder is 100% deterministic.
+*   `[x]` **All 58 Tests Pass**: Pytest suite reports 100% success.
+*   `[x]` **No Phase 7 Leakage**: No gateway, guardrails, or prompt files created.
