@@ -13,9 +13,11 @@ class QdrantVectorStoreAdapter(BaseVectorStore):
         if host:
             logger.info(f"Connecting to Qdrant server at {host}:{port}")
             self.client = QdrantClient(url=host, port=port, api_key=api_key)
+            self.mode = "qdrant"
         else:
             logger.info("Initializing in-memory local Qdrant client fallback")
             self.client = QdrantClient(location=":memory:")
+            self.mode = "memory"
 
     def create_collection(self, collection_name: str, vector_size: int) -> None:
         try:

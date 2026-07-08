@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     # --- GEMINI EMBEDDINGS ---
     GEMINI_API_KEY: str | None = Field(default=None)
 
+    # --- KNOWLEDGE LAYER CONFIG ---
+    EMBEDDING_PROVIDER: str = Field(default="mock")  # "mock" or "sentence-transformer"
+    EMBEDDING_MODEL_NAME: str = Field(default="all-MiniLM-L6-v2")
+    EMBEDDING_DEVICE: str = Field(default="cpu")
+    EMBEDDING_BATCH_SIZE: int = Field(default=32)
+    RERANKER_PROVIDER: str = Field(default="flashrank")  # "flashrank" or "lexical-fallback"
+
     # --- VECTOR DB (QDRANT) ---
     QDRANT_URL: str | None = Field(default=None)
     QDRANT_API_KEY: str | None = Field(default=None)
