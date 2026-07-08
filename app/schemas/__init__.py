@@ -19,7 +19,13 @@ from app.schemas.evidence import (
 )
 from app.schemas.planning import PlanStep, InvestigationPlan, ToolFailure
 from app.schemas.rca import Hypothesis, Confidence, RecommendedAction, RCAResponse, GroundTruthLabels, GoldenCase
-from app.schemas.knowledge import KnowledgeDocument, KnowledgeChunk, KnowledgeBundle
+from app.schemas.knowledge import (
+    KnowledgeDocument,
+    KnowledgeChunk,
+    KnowledgeBundle,
+    RetrievalChannelProvenance,
+    RetrievalExecutionMetadata,
+)
 
 __all__ = [
     "TimeWindow",
@@ -52,5 +58,7 @@ __all__ = [
     "KnowledgeDocument",
     "KnowledgeChunk",
     "KnowledgeBundle",
+    "RetrievalChannelProvenance",
+    "RetrievalExecutionMetadata",
 ]
 

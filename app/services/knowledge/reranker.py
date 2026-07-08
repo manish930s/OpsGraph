@@ -19,6 +19,10 @@ class FlashRankReranker:
         except ImportError:
             logger.info("FlashRank library not imported. Local word-overlap matching will be used.")
 
+    @property
+    def mode(self) -> str:
+        return "flashrank" if self.has_flashrank else "lexical-fallback"
+
     def rerank(self, query: str, chunks: list[dict], limit: int = 5) -> list[tuple[float, dict]]:
         """
         Reranks a list of candidate chunk payloads.
@@ -56,6 +60,7 @@ class FlashRankReranker:
 
             except Exception as e:
                 logger.warning(f"FlashRank execution failed: {e}. Falling back to overlap reranking.")
+                self.has_flashrank = False
 
         # Fallback: Deterministic word Jaccard overlap similarity
         query_words = set(re.findall(r"\w+", query.lower()))
