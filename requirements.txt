@@ -15,6 +15,8 @@ flashrank                   # Ultra-fast local cross-encoder for semantic rerank
 sentence-transformers       # Real embedding provider library
 langchain                   # Core LLM orchestration
 langchain-community         # Community-contributed tools and loaders
+groq                        # SDK for Groq API (Phase 7)
+google-generativeai         # SDK for Gemini API (Phase 7)
 
 # --- CURRENT DEVELOPMENT & TEST DEPENDENCIES ---
 pytest                      # Testing framework

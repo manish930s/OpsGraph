@@ -1,116 +1,246 @@
 # LLM Gateway, Prompt Assembly, and Guardrails Architecture (Phase 7)
-**Document Status:** Finalized & Hardened  
+**Document Status:** Final Verification Pass Complete  
 **Authoritative Reference:** Controlled Model Execution, Provider Abstraction, and Fallback Policies  
 
 ---
 
-## 1. High-Level Architecture & Phase Boundary
+## 1. Phase Boundary
 
-Phase 7 introduces the first controlled model execution layer in OpsGraph AI. It sits between the Deterministic Context Builder (Phase 6) and the future Bounded LangGraph Investigation Engine (Phase 8). 
+Phase 7 introduces the first controlled model execution layer in OpsGraph AI. It sits between the Deterministic Context Builder (Phase 6) and the future Bounded LangGraph Investigation Engine (Phase 8).
 
-The flow is strictly unidirectional: context-in and structured-response-out.
+The flow is strictly unidirectional: **context-in → structured-response-out**. The only authoritative model input is a validated `InvestigationContext` transformed through the Prompt Assembly layer. Raw telemetry, repositories, tools, vector stores, and evaluation truth are inaccessible to model providers.
 
-```mermaid
-graph TD
-    Context[InvestigationContext] -->|Parsed| Assembler[Prompt Assembler]
-    Assembler -->|ModelRequest| InputGuard[Input Guardrails]
-    InputGuard -->|Validated Request| Gateway[LLM Gateway]
-    Gateway -->|Unified call| Providers[LLMProvider Protocol]
-    Providers -->|Groq / Gemini Adapters| API[External LLM APIs]
-    API -->|Raw Output| GatewayJSONExtract[JSON Extract Helper]
-    GatewayJSONExtract -->|Clean JSON string| OutputGuard[Output Guardrails]
-    OutputGuard -->|Passed JSON| StructuredParser[Structured JSON Parser]
-    StructuredParser -->|Pydantic Model| CitationVal[Citation Validator]
-    CitationVal -->|Success| Response[ValidatedModelResponse]
+---
+
+## 2. Actual Output Pipeline (Verified from Code)
+
+The following is the **exact call sequence** as implemented in `gateway.py`:
+
+```
+InvestigationContext
+    |
+    v  PromptAssembler.assemble()
+ModelRequest  (immutable Pydantic, context_references tuple)
+    |
+    v  DeterministicInputGuard.evaluate()  +  NeMoInputGuard.evaluate() (deferred)
+Validated ModelRequest
+    |
+    v  BoundedRetryHandler.execute(provider.generate)
+Raw provider string  (may contain markdown fences or surrounding prose)
+    |
+    v  extract_json_payload()  [gateway.py module function]
+Clean JSON string
+    |
+    v  DeterministicOutputGuard.evaluate()  [façade — see §5]
+       + NeMoOutputGuard.evaluate() (deferred)
+Policy-validated JSON string
+    |
+    v  json.loads() + Pydantic RCADecisionResponse(**parsed_data)
+Typed Pydantic model  (field_validator deduplicates citation lists)
+    |
+    v  ValidatedModelResponse  (typed response + LLMExecutionMetadata)
 ```
 
 ---
 
-## 2. Provider Capability Matrix
+## 3. Prompt Assembly Layer
+
+- **Service**: `PromptAssembler` (`app/services/prompting/assembler.py`)
+- **Input**: `InvestigationContext`
+- **Output**: Immutable `ModelRequest`
+- **Template Registry**: `PromptRegistry` loads templates from `prompts/rca/` by version key.
+
+### Injection Risk-Reduction Boundary
+The assembler separates instruction from data at compile time:
+1. System instructions (`system_v1.txt`) define the strict SRE role constraints before any user data is seen.
+2. Retrieved operational knowledge is wrapped inside structural XML tags `<untrusted_knowledge_context>` in the user message.
+3. The system prompt explicitly instructs the model to treat this block as read-only data.
+
+> **Note**: This provides structural instruction-data separation. It is not a cryptographic or mathematical injection prevention guarantee.
+
+---
+
+## 4. Provider-Agnostic LLM Gateway
+
+- **Protocol**: `LLMProvider` (`app/services/gateway/provider.py`) — `generate(request: ModelRequest) -> str`
+- **Configuration Validation**: `LLMGateway.validate_configuration()` runs at construction and before each `generate()` call.
+
+### Provider Capability Matrix (Verified Against Adapter Code)
 
 | Category | Groq Adapter | Gemini Adapter |
 | :--- | :--- | :--- |
-| **Provider Name** | `groq` | `gemini` |
-| **Active Model** | `llama-3.3-70b-versatile` | `gemini-1.5-flash` |
-| **Structured Output Mode** | JSON Mode (`response_format={"type": "json_object"}`) | JSON MIME-type (`response_mime_type="application/json"`) |
-| **Timeout Support** | Configured timeout routed to Groq SDK client | Configured timeout routed to Gemini API request options |
-| **Usage Metadata** | Normalized usage count (from response payload) | Normalized usage count (from response metadata) |
-| **Provider Request ID** | Exposed if present in response headers | Exposed if present in API metadata |
-| **Finish Reason** | Extracted from choice metadata | Extracted from candidate finish reason |
-| **Rate-Limit Mapping** | HTTP 429 maps to `ProviderRateLimitError` | `ResourceExhausted` maps to `ProviderRateLimitError` |
-| **Authentication Mapping** | HTTP 401/403 maps to `ProviderAuthenticationError` | `PermissionDenied` maps to `ProviderAuthenticationError` |
-| **Live Smoke-Test Status** | Skipped by default (skips cleanly if API key missing) | Skipped by default (skips cleanly if API key missing) |
+| **Config Key** | `LLM_DEFAULT_PROVIDER = "groq"` | `LLM_DEFAULT_PROVIDER = "gemini"` |
+| **Model Config** | `settings.GROQ_MODEL` (default: `llama-3.3-70b-versatile`) | `settings.GEMINI_MODEL` (default: `gemini-1.5-flash`) |
+| **SDK** | `groq` (Groq Python SDK) | `google-generativeai` (deprecated; see §10) |
+| **Structured Output Mode** | `response_format={"type": "json_object"}` | `response_mime_type="application/json"` via `GenerationConfig` |
+| **Temperature** | `0.0` (hardcoded deterministic) | `0.0` (hardcoded deterministic) |
+| **Timeout** | `request.timeout_configuration` → Groq SDK `timeout=` param | `request.timeout_configuration` → `request_options={"timeout": ...}` |
+| **Usage Metadata** | Not extracted by adapter (not exposed in `ValidatedModelResponse`) | Not extracted by adapter (not exposed in `ValidatedModelResponse`) |
+| **Provider Request ID** | Not extracted by adapter | Not extracted by adapter |
+| **Finish Reason** | Not extracted; hardcoded `"stop"` in gateway | Not extracted; hardcoded `"stop"` in gateway |
+| **Rate-Limit Mapping** | `APIStatusError` HTTP 429 → `ProviderRateLimitError` | `ResourceExhausted` → `ProviderRateLimitError` |
+| **Auth Failure Mapping** | `APIStatusError` HTTP 401/403 → `ProviderAuthenticationError` | `PermissionDenied` → `ProviderAuthenticationError` |
+| **Timeout Mapping** | `APITimeoutError` → `ProviderTimeoutError` | `DeadlineExceeded` → `ProviderTimeoutError` |
+| **Connection Error Mapping** | `APIConnectionError` → `ProviderUnavailableError` | `GoogleAPIError` → `ProviderUnavailableError` |
+| **Mock Mode** | Returns deterministic JSON when `LLM_PROVIDER = "mock"` | Returns deterministic JSON when `LLM_PROVIDER = "mock"` |
+| **Live Smoke-Test Status** | NOT EXECUTED — API key unavailable in current environment | NOT EXECUTED — API key unavailable in current environment |
+
+> **Capability note**: `usage_metadata`, `provider_request_id`, and `finish_reason` fields exist in `LLMExecutionMetadata` but are populated with defaults (`{}`, `None`, `"stop"`) because neither adapter currently extracts them from provider SDK responses. These are documented as current limitations in §10.
 
 ---
 
-## 3. Detailed Component Design & Policies
+## 5. Output Guard Responsibility (Verified Façade)
 
-### 3.1 Prompt Assembly Layer & Injection Risk-Reduction
-*   **Responsible Service**: `PromptAssembler` (`assembler.py`)
-*   **Input**: `InvestigationContext` (evidence observations, knowledge chunks, and incident details).
-*   **Prompt Injection Risk-Reduction Boundary**:
-    To reduce prompt injection risk, the assembler strictly separates instructions from untrusted data:
-    1.  The system instruction prompt (`system_v1.txt`) defines the strict SRE authority rules.
-    2.  All retrieved operational knowledge is wrapped in structural XML tags `<untrusted_knowledge_context>` within the user message.
-    3.  Instructions explicitly notify the model to treat this block purely as data and not follow commands embedded within it.
-    *Notice: This provides structural instruction/data isolation, not a mathematical security guarantee.*
+`DeterministicOutputGuard.evaluate(content, request)` is a **pipeline façade** that performs all of the following in sequence:
 
-### 3.2 Provider-Agnostic LLM Gateway
-*   **Protocol**: `LLMProvider` (`provider.py`) defines the contract (`generate(request) -> str`).
-*   **Adapters**:
-    *   `GroqProvider` (`groq_provider.py`): Normalizes Groq SDK calls and error statuses.
-    *   `GeminiProvider` (`gemini_provider.py`): Normalizes Google Generative AI SDK calls and error statuses.
-*   **Configuration Validation**: On startup and at the beginning of each request execution, the Gateway validates configurations (verifying timeouts are positive, retry counts are non-negative, fallback provider is not equal to primary provider, and keys are present for active live providers).
+1. **Empty check** — raises `GuardrailRejectedError` if content is empty.
+2. **JSON format validation** — `json.loads(content)`; raises `GuardrailRejectedError` on `JSONDecodeError`.
+3. **Text-level citation scan** — `re.findall(r"\[(CTX-[a-zA-Z0-9_\-]+)\]", content)` against all raw JSON text; raises `CitationValidationError` for any hallucinated reference not in `ModelRequest.context_references`.
+4. **Typed list citation validation** — iterates `supporting_evidence_references`, `contradicting_evidence_references`, and `knowledge_references` lists from the parsed JSON dict; raises `CitationValidationError` for any reference absent from `ModelRequest.context_references`.
+5. **RCA empty-citation policy** — for `task_type == "rca"`, at least one of: observations, supporting evidence references, or uncertainty statements must be non-empty; raises `CitationValidationError` otherwise.
+6. **Response-size policy** — raises `GuardrailRejectedError` if `len(content) > 100000`.
 
-### 3.3 Retryable and Non-Retryable Error Policies
-
-#### Retryable Exceptions (Transient Failures)
-These exceptions are retried using exponential backoff up to `LLM_MAX_RETRIES` (default: 3):
--   `ProviderRateLimitError` (API quota or rate limits exhausted)
--   `ProviderTimeoutError` (request timed out)
--   `ProviderUnavailableError` (temporary API connection drop or service offline)
-
-#### Non-Retryable Exceptions (Permanent Failures)
-These exceptions immediately propagate out of the Gateway without retry or fallback:
--   `ProviderConfigurationError` (missing credentials for active provider, negative timeouts)
--   `ProviderAuthenticationError` (invalid API key, permission denied)
--   `GuardrailRejectedError` (input/output safety policy violations, malformed JSON)
--   `CitationValidationError` (hallucinated references, invalid context matches)
--   `StructuredOutputError` (Pydantic parsing or schema format failures)
-
-### 3.4 Fallback Eligibility & Maximum Provider Transition Policy
--   **Fallback Trigger**: Fallback is only eligible for **transient retryable errors** after all local retries are exhausted.
--   **Enabled Check**: Fallback is enabled only if `LLM_FALLBACK_ENABLED=True`, a fallback provider name is configured, and it differs from the default primary provider.
--   **Maximum Transition Count**: Strictly limited to **exactly 1 transition** per request. If the fallback provider fails, it propagates the failure immediately. Provider ping-pong is impossible.
-
-### 3.5 Guardrail Boundary & Citation Integrity
--   **Input Guard**: Verifies approved template IDs, validates non-empty context for RCA tasks, and scans prompts for common credential patterns to prevent secret leaks.
--   **Output Guard**: Extracts JSON from surrounding text or markdown code fences, checks JSON format validity, and verifies citation integrity.
--   **Citation Validation Source of Truth**: The validation is checked against `ModelRequest.context_references`. Every `[CTX-...]` citation text in observations, hypotheses, or summaries must match a value in the request references. Hallucinated or upstream-valid but request-absent references raise `CitationValidationError`. Duplicate citations are deterministically deduplicated preserving order during Pydantic schema instantiation.
-
-### 3.6 Execution Metadata Semantics
-Every model execution exposes typed metadata. It distinguishes:
--   `upstream_degraded_mode`: Indicates if Phase 6 upstream context builder was degraded.
--   `fallback_attempted`: Indicates if the gateway switched providers.
--   `degraded_mode`: Set to True if any degraded operational state was active.
+> **Architecture note**: Citation validation occurs **before** Pydantic schema parsing. This means the output guard operates on the raw cleaned JSON string. Pydantic `RCADecisionResponse` provides a second deduplication pass via `@field_validator` after parsing, but citation membership is fully validated by the output guard.
 
 ---
 
-## 4. Technical Debt & Limitations Assessment
+## 6. Citation Validation Architecture
 
-1.  **Word-Based Budget Estimation**: Token count budget limits are estimated using basic word-splitting (`len(prompt.split())`). A model-native tokenizer (like tiktoken) should be integrated in production.
-2.  **NeMo Guardrails Status**: Integration is deferred. NeMo Guardrails fails to compile natively on Windows under Python 3.14.0. Graceful fallback executes local deterministic guards, and NeMo runs in deferred mode. Production deployment requires standardizing on Python 3.11.
-3.  **No Cost or Quality-Based Routing**: Dynamic routing based on model execution cost or model quality scores is not supported.
+**Citation validation is hybrid**: text-level regex scan + typed list field validation.
+
+**Source of truth**: `ModelRequest.context_references` — the exact set of citation IDs included in the assembled prompt. This is not the full Phase 6 context, not all repository evidence IDs, and not all knowledge chunk IDs in storage. If the Context Builder excluded some items from the prompt budget, those IDs are absent from `context_references` and will correctly fail validation if referenced in model output.
+
+**Validated citation types**:
+- `[CTX-...]` patterns embedded in any string field (observations, summaries, hypotheses)
+- `supporting_evidence_references` list
+- `contradicting_evidence_references` list
+- `knowledge_references` list
+
+**Pydantic-level deduplication**: `RCADecisionResponse` and `CriticDecisionResponse` carry `@field_validator` that deduplicates reference lists preserving original order before schema validation.
 
 ---
 
-## 5. Phase 8 Bounded Orchestration Boundary
+## 7. Retry and Fallback Policies
 
-LangGraph is an orchestration layer. It must **not** be used for uncontrolled multi-agent autonomy. 
+### Retryable Exceptions (Transient)
+Retried with exponential backoff up to `LLM_MAX_RETRIES` (default: 3):
+- `ProviderRateLimitError`
+- `ProviderTimeoutError`
+- `ProviderUnavailableError`
+
+### Non-Retryable Exceptions (Permanent — propagate immediately)
+- `ProviderConfigurationError`
+- `ProviderAuthenticationError`
+- `GuardrailRejectedError`
+- `CitationValidationError`
+- `StructuredOutputError`
+
+### Fallback Policy
+- Fallback triggers only after: retry policy exhausted on a **transient** error, `LLM_FALLBACK_ENABLED=True`, a fallback provider is configured, and it differs from the initial provider.
+- **Maximum transitions: 1**. If the fallback provider also fails, the error propagates without further retry.
+- Fallback is availability-oriented, not quality-oriented. No cost-based or latency-based routing exists.
+
+---
+
+## 8. Execution Metadata Fields
+
+| Field | Truthful Population |
+| :--- | :--- |
+| `request_id` | From `ModelRequest.request_id` |
+| `task_type` | From `ModelRequest.task_type` |
+| `prompt_template_id` | From `ModelRequest.prompt_template_id` |
+| `prompt_version` | From `ModelRequest.prompt_version` |
+| `requested_provider` | From `ModelRequest.provider_preference` (may be `None`) |
+| `initial_provider` | Provider name resolved at start of execution |
+| `final_provider` | Provider name after possible fallback transition |
+| `model_id` | From `provider.model_id` property |
+| `retry_count` | Actual retry attempts (0 = success on first try) |
+| `fallback_attempted` | `True` only if a provider transition occurred |
+| `fallback_reason` | Exception class + message if fallback occurred, else `None` |
+| `latency_ms` | Measured via `time.perf_counter()` |
+| `finish_reason` | Hardcoded `"stop"` — **not extracted from provider SDK** (limitation) |
+| `usage_metadata` | Always `{}` — **not extracted from provider SDK** (limitation) |
+| `input_guardrail_status` | `"passed"` (only success path reaches this point) |
+| `output_guardrail_status` | `"passed"`, `"rejected"`, or `"citation_failed"` |
+| `schema_validation_status` | `"passed"` (only success path reaches this point) |
+| `citation_validation_status` | `"passed"` (only success path reaches this point) |
+| `degraded_mode` | From `request.request_metadata.get("degraded_mode", False)` |
+
+---
+
+## 9. NeMo Guardrails Status
+
+- **Runtime Status**: Deferred. `nemoguardrails` requires native extension compilation that fails on Python 3.14.0 on Windows.
+- **Adapter Boundary**: `NeMoInputGuard` and `NeMoOutputGuard` exist in `app/services/guardrails/nemo_adapter.py` and are instantiated in `LLMGateway.__init__`. They gracefully log a warning and pass through without enforcement.
+- **Active Guards**: `DeterministicInputGuard` and `DeterministicOutputGuard` are fully active.
+- **Production requirement**: Standardize on Python 3.11 before enabling NeMo runtime.
+
+---
+
+## 10. Technical Debt and Operational Limitations
+
+### Token Estimation — *Current Limitation*
+Context budget limits are estimated using word-splitting (`len(prompt.split())`). Model-native tokenizers (e.g., tiktoken) are required for production accuracy. Word counts diverge from BPE token counts depending on vocabulary and language.
+
+### google-generativeai SDK Deprecation — *Operational Concern (Active)*
+The installed `google-generativeai` SDK is fully deprecated. The Gemini adapter emits a `FutureWarning` during import. Migration to the `google-genai` package (the replacement SDK) is required before the current package stops receiving security updates. This does not affect functionality today but constitutes a dependency risk.
+
+### Usage Metadata and Finish Reason Not Extracted — *Current Limitation*
+Neither the Groq nor Gemini adapter currently extracts `usage_metadata` (token counts) or `finish_reason` from the actual provider SDK response. These fields exist in `LLMExecutionMetadata` but are populated with defaults. Extracting them would improve observability and token-cost accounting.
+
+### Provider Request ID Not Extracted — *Current Limitation*
+Neither adapter captures the provider-side request ID from response headers/metadata. This field exists in `LLMExecutionMetadata` but is `None` in practice. Provider request IDs are important for support escalations.
+
+### Live Provider Verification — *Operational Concern*
+No live smoke tests have been executed in this environment. Both Groq and Gemini tests skip cleanly when API keys are absent. **Status: NOT EXECUTED — API keys unavailable in execution environment.**
+
+### Provider SDK Version Pinning — *Deferred Decision*
+`requirements.txt` declares `groq` and `google-generativeai` without version pins. `requirements-prod.txt` pins versions for production Cloud Run. Local development reproducibility depends on pip resolution at install time.
+
+### Structured Output Mode Differences — *Operational Concern*
+- **Groq**: Uses `response_format={"type": "json_object"}`. The model is instructed to produce JSON; the API enforces JSON tokenization constraints.
+- **Gemini**: Uses `response_mime_type="application/json"` in `GenerationConfig`. The API returns content typed as JSON but does not guarantee schema compliance.
+- In both cases, `extract_json_payload()` strips any markdown fences before the output guard processes content.
+
+### Quota and Rate-Limit Behavior — *Operational Concern*
+Provider quotas and free-tier availability are operational conditions, not architectural guarantees. Both adapters map rate-limit responses to `ProviderRateLimitError`, which triggers retry with backoff. Quota exhaustion that persists beyond retry limits will propagate to the caller.
+
+### Fallback Limitations — *Architectural Decision, Documented*
+- Maximum 1 provider transition per request.
+- Fallback is only available for transient failures.
+- Fallback is availability-oriented: if Groq is unavailable, Gemini is tried. There is no quality-based routing, cost optimization, or latency-based routing.
+
+### Model Quality Evaluation — *Not Implemented*
+No systematic quality comparison between Groq (Llama 3.3) and Gemini (Gemini 1.5 Flash) exists. Provider quality routing is not implemented.
+
+### Cost-Aware Routing — *Not Implemented*
+Request-cost optimization is not implemented. The gateway selects providers based on configuration and availability only.
+
+### Persistent Execution Tracing — *Current Limitation*
+Execution metadata is returned in `ValidatedModelResponse.execution_metadata` and may be emitted to Logfire/LangSmith if configured, but is not persisted to a dedicated trace store. No structured trace query interface exists.
+
+### Prompt Version Migration Policy — *Deferred Decision*
+Templates are loaded by version string. There is no formal policy governing deprecation of old template versions, migration pathways, or backward compatibility windows. This is a deferred operational decision.
+
+---
+
+## 11. Phase 8 Bounded Orchestration Boundary
+
+LangGraph is an orchestration layer for Phase 8. It must **not** be used for uncontrolled multi-agent autonomy.
 
 The Phase 8 graph structure must remain bounded and deterministic:
-1.  **State Schema**: Strict typing of the investigation state.
-2.  **Bounded Iterations**: Explicit loop termination conditions and maximum loop count parameters.
-3.  **Conditional Routing**: Deterministic routing based on model-derived flags (no infinite loops).
-4.  **Node Contracts**: Each node must perform a specific sub-task (evidence collection, runbook matching, hypothesis generation, critic check, decision).
-5.  **Tool Allowlist**: Strict control over tool parameters and execution limits.
+1. **Typed State Schema**: Explicit `TypedDict` or Pydantic investigation state.
+2. **Explicit Node Contracts**: Each node has a single responsibility (evidence collection, runbook matching, hypothesis generation, critic evaluation, decision).
+3. **Bounded Iterations**: Maximum loop count parameter; termination condition on confidence threshold or evidence sufficiency.
+4. **Deterministic Routing**: Conditional edges based on explicit typed flags in graph state.
+5. **Tool Allowlist**: Strict control over tool parameters and per-invocation execution limits.
+6. **Failure States**: Explicit failure nodes for tool errors, citation failures, and model refusals.
+7. **Human-Review Boundary**: If confidence remains below threshold after max iterations, route to human-review state rather than producing an uncertain automated decision.
+
+Phase 8 must not implement, import, or depend on:
+- FastAPI
+- Streamlit
+- Evaluation frameworks
+- Direct telemetry repository access
+- Raw vector store access
+- NeMo Guardrails (until Python 3.11 environment is standardized)

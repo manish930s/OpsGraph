@@ -1,117 +1,301 @@
-# OpsGraph AI — Phase Migration Report
-**Document Status:** Finalized (Phase 7 Complete & Stabilized)  
-**Reporting Phase:** Phase 7: Prompt Assembly, Guardrails, and LLM Gateway  
-**Execution Date:** 2026-07-08  
-**Lead Engineer:** Antigravity (AI Coding Assistant)  
+# OpsGraph AI — Phase 7 Final Migration Report
+**Document Status:** Final Verification Pass Complete  
+**Phase:** Phase 7 — Prompt Assembly, Guardrails, and Provider-Agnostic LLM Gateway  
+**Execution Date:** 2026-07-09  
+**Python Runtime:** CPython 3.14.0 (Windows)  
 
 ---
 
 ## 1. Executive Summary
 
-Phase 7 of the OpsGraph AI migration is complete and fully stabilized. We have built the prompting, guardrails, and LLM gateway modules, providing a unified, provider-agnostic bridge for structured model execution. Prompt Assembly reduces prompt injection risk by isolating untrusted knowledge from system instructions, and template versioning is managed via a template registry. The LLM Gateway orchestrates input/output safety guards, rate/timeout retries, fallback provider routing, JSON validation, and citation mapping. NeMo Guardrails has been structured as an adapter and operates in deferred execution mode due to Python 3.14 compilation blockers on Windows. All 88 tests (86 unit tests and 2 skipped live integration tests) pass successfully.
+Phase 7 delivers the first controlled model execution layer in OpsGraph AI. It provides a unified, provider-agnostic bridge for structured model execution between the Deterministic Context Builder (Phase 6) and the future Bounded LangGraph Investigation Engine (Phase 8). Prompt Assembly reduces prompt injection risk by structurally isolating untrusted retrieved knowledge from system instructions. Template versioning is managed via a registry. The LLM Gateway orchestrates input/output safety guards, exponential-backoff retries, one-transition provider fallback, JSON extraction, citation validation, and structured response parsing. NeMo Guardrails operates as a deferred adapter boundary; deterministic application guards are fully active.
+
+The full suite collected **88 tests: 86 passed, 0 failed, and 2 opt-in live integration tests were skipped because provider API keys were unavailable in the execution environment.**
 
 ---
 
-## 2. Repository Revision & Git Status
-*   **Active Branch**: `feature/phase-7-prompt-guardrails-gateway`
-*   **Execution Workspace**: `opsgraph-ai/`
-*   **Working Tree State**: Clean and Verified
+## 2. Repository State
+
+- **Active Branch**: `feature/phase-7-prompt-guardrails-gateway`
+- **Working Tree State**: Clean — no uncommitted modifications
+- **Python Runtime**: CPython 3.14.0 (Windows x64)
 
 ---
 
-## 3. File Modification Ledger
+## 3. Secret Safety Verification
 
-All file paths listed below are relative to the target codebase root `opsgraph-ai/`.
-
-### 3.1 Files Created
-*   `[NEW]` [app/schemas/prompting.py](../opsgraph-ai/app/schemas/prompting.py) - Input message and request schemas.
-*   `[NEW]` [app/schemas/model_response.py](../opsgraph-ai/app/schemas/model_response.py) - Response and execution metadata schemas.
-*   `[NEW]` [prompts/rca/system_v1.txt](../opsgraph-ai/prompts/rca/system_v1.txt) - System prompt version 1 instructions.
-*   `[NEW]` [prompts/rca/investigation_v1.txt](../opsgraph-ai/prompts/rca/investigation_v1.txt) - User investigation prompt version 1 template.
-*   `[NEW]` [prompts/rca/critic_v1.txt](../opsgraph-ai/prompts/rca/critic_v1.txt) - Critic prompt version 1 template.
-*   `[NEW]` [app/services/prompting/templates.py](../opsgraph-ai/app/services/prompting/templates.py) - Dynamic versioned prompt registry.
-*   `[NEW]` [app/services/prompting/assembler.py](../opsgraph-ai/app/services/prompting/assembler.py) - Context assembly and injection risk-reduction service.
-*   `[NEW]` [app/services/prompting/__init__.py](../opsgraph-ai/app/services/prompting/__init__.py) - Prompting package index.
-*   `[NEW]` [app/services/guardrails/base.py](../opsgraph-ai/app/services/guardrails/base.py) - ABCs for input/output guards.
-*   `[NEW]` [app/services/guardrails/input_guard.py](../opsgraph-ai/app/services/guardrails/input_guard.py) - Input format, template, and leak guards.
-*   `[NEW]` [app/services/guardrails/output_guard.py](../opsgraph-ai/app/services/guardrails/output_guard.py) - JSON format and citation validator guards.
-*   `[NEW]` [app/services/guardrails/nemo_adapter.py](../opsgraph-ai/app/services/guardrails/nemo_adapter.py) - NeMo Guardrails adapter fallback shim.
-*   `[NEW]` [app/services/guardrails/__init__.py](../opsgraph-ai/app/services/guardrails/__init__.py) - Guardrails package index.
-*   `[NEW]` [app/services/gateway/errors.py](../opsgraph-ai/app/services/gateway/errors.py) - Provider-agnostic domain exceptions.
-*   `[NEW]` [app/services/gateway/provider.py](../opsgraph-ai/app/services/gateway/provider.py) - LLMProvider interface protocol.
-*   `[NEW]` [app/services/gateway/providers/groq_provider.py](../opsgraph-ai/app/services/gateway/providers/groq_provider.py) - Groq API client adapter.
-*   `[NEW]` [app/services/gateway/providers/gemini_provider.py](../opsgraph-ai/app/services/gateway/providers/gemini_provider.py) - Gemini API client adapter.
-*   `[NEW]` [app/services/gateway/providers/__init__.py](../opsgraph-ai/app/services/gateway/providers/__init__.py) - Providers package index.
-*   `[NEW]` [app/services/gateway/retry.py](../opsgraph-ai/app/services/gateway/retry.py) - Bounded retry exponential handler.
-*   `[NEW]` [app/services/gateway/gateway.py](../opsgraph-ai/app/services/gateway/gateway.py) - LLMGateway orchestrator.
-*   `[NEW]` [app/services/gateway/__init__.py](../opsgraph-ai/app/services/gateway/__init__.py) - Gateway package index.
-*   `[NEW]` [PROJECT_CONTEXT/LLM_GATEWAY_ARCHITECTURE.md](../opsgraph-ai/PROJECT_CONTEXT/LLM_GATEWAY_ARCHITECTURE.md) - LLM gateway architecture diagram and design.
-*   `[NEW]` [tests/unit/test_prompt_gateway.py](../opsgraph-ai/tests/unit/test_prompt_gateway.py) - Full Prompt Assembly, Guardrails, and LLM Gateway unit test suite.
-*   `[NEW]` [tests/integration/test_live_gateway.py](../opsgraph-ai/tests/integration/test_live_gateway.py) - Opt-in live provider smoke tests.
-*   `[NEW]` [pytest.ini](../opsgraph-ai/pytest.ini) - Pytest custom markers registration file.
-
-### 3.2 Files Modified
-*   `[MODIFY]` [app/config.py](../opsgraph-ai/app/config.py) - Centralized Phase 7 timeout, retry, model, and fallback configuration settings.
-*   `[MODIFY]` [app/schemas/__init__.py](../opsgraph-ai/app/schemas/__init__.py) - Exported all prompting and response models.
-*   `[MODIFY]` [README.md](../opsgraph-ai/README.md) - Updated with Phase 7 roadmap implementation status.
+- `.env` is listed in `.gitignore` (exact match)
+- `.env.*` variants are now also listed in `.gitignore` with `!.env.example` exclusion (added in this pass)
+- `git check-ignore .env` confirms `.env` is ignored
+- `.env.example` is tracked and contains only placeholder empty strings — no real credentials
+- `GROQ_API_KEY` available in current execution environment: **False**
+- `GEMINI_API_KEY` available in current execution environment: **False**
+- No API key values appear in any source file, test file, migration report, or architecture document
+- Search of tracked files confirms no real credentials are staged or committed
 
 ---
 
-## 4. Provider Capability Matrix
+## 4. File Ledger
+
+### Files Created (Phase 7)
+
+| Path | Purpose |
+| :--- | :--- |
+| `app/schemas/prompting.py` | `ModelRequest` and `Message` schemas |
+| `app/schemas/model_response.py` | `ValidatedModelResponse`, `RCADecisionResponse`, `CriticDecisionResponse`, `LLMExecutionMetadata` |
+| `prompts/rca/system_v1.txt` | System prompt v1 |
+| `prompts/rca/investigation_v1.txt` | Investigation user prompt v1 |
+| `prompts/rca/critic_v1.txt` | Critic user prompt v1 |
+| `app/services/prompting/templates.py` | Versioned prompt registry |
+| `app/services/prompting/assembler.py` | `PromptAssembler` — context-to-request compilation |
+| `app/services/prompting/__init__.py` | Package export |
+| `app/services/guardrails/base.py` | `InputGuard` and `OutputGuard` ABCs |
+| `app/services/guardrails/input_guard.py` | `DeterministicInputGuard` |
+| `app/services/guardrails/output_guard.py` | `DeterministicOutputGuard` (pipeline façade) |
+| `app/services/guardrails/nemo_adapter.py` | `NeMoInputGuard` and `NeMoOutputGuard` (deferred) |
+| `app/services/guardrails/__init__.py` | Package export |
+| `app/services/gateway/errors.py` | `GatewayError` hierarchy |
+| `app/services/gateway/provider.py` | `LLMProvider` protocol |
+| `app/services/gateway/providers/groq_provider.py` | Groq SDK adapter |
+| `app/services/gateway/providers/gemini_provider.py` | Gemini SDK adapter |
+| `app/services/gateway/providers/__init__.py` | Package export |
+| `app/services/gateway/retry.py` | `BoundedRetryHandler` |
+| `app/services/gateway/gateway.py` | `LLMGateway` orchestrator + `extract_json_payload()` |
+| `app/services/gateway/__init__.py` | Package export |
+| `PROJECT_CONTEXT/LLM_GATEWAY_ARCHITECTURE.md` | Architecture reference |
+| `tests/unit/test_prompt_gateway.py` | Unit test suite |
+| `tests/integration/test_live_gateway.py` | Opt-in live provider smoke tests |
+| `pytest.ini` | Custom marker registration (`live_api`) |
+
+### Files Modified (Phase 7)
+
+| Path | Change |
+| :--- | :--- |
+| `app/config.py` | Added `LLM_PROVIDER`, `LLM_DEFAULT_PROVIDER`, `GROQ_MODEL`, `GEMINI_MODEL`, `LLM_REQUEST_TIMEOUT_SECONDS`, `LLM_MAX_RETRIES`, `LLM_FALLBACK_ENABLED`, `LLM_FALLBACK_PROVIDER` |
+| `app/schemas/__init__.py` | Exported prompting and response models |
+| `app/schemas/model_response.py` | Added `extra="forbid"` and citation deduplication validators |
+| `requirements.txt` | Added `groq` and `google-generativeai` |
+| `.gitignore` | Added `.env.*` and `!.env.example` |
+| `DOCS/00_MIGRATION_REPORT.md` | Updated (this document) |
+| `README.md` | Updated Phase 7 roadmap status |
+
+---
+
+## 5. Actual Output Pipeline (Verified from `gateway.py`)
+
+```
+InvestigationContext
+    ↓  PromptAssembler.assemble()
+ModelRequest  [immutable Pydantic, context_references tuple]
+    ↓  DeterministicInputGuard.evaluate()
+    ↓  NeMoInputGuard.evaluate()  [deferred — no-op]
+Validated ModelRequest
+    ↓  BoundedRetryHandler.execute(provider.generate)
+Raw provider string  [may contain markdown fences]
+    ↓  extract_json_payload()  [module function in gateway.py]
+Clean JSON string
+    ↓  DeterministicOutputGuard.evaluate()  [façade]
+    ↓  NeMoOutputGuard.evaluate()  [deferred — no-op]
+Policy-validated JSON string
+    ↓  json.loads() + Pydantic RCADecisionResponse(**data) or CriticDecisionResponse(**data)
+Typed Pydantic model  [field_validator deduplicates citation lists]
+    ↓
+ValidatedModelResponse  [typed response + LLMExecutionMetadata]
+```
+
+---
+
+## 6. Prompt Assembly Boundary
+
+- `PromptAssembler.assemble(context, task_type, prompt_version)` produces an immutable `ModelRequest`.
+- System instructions are compiled into `system_message` from versioned templates.
+- User message contains structured telemetry observations and retrieved knowledge.
+- Retrieved knowledge is isolated inside `<untrusted_knowledge_context>` XML tags with explicit instructions to treat it as read-only data.
+- `ModelRequest.context_references` is populated with the exact citation IDs present in the compiled prompt. This tuple becomes the citation validation source of truth.
+
+> **Injection Risk-Reduction Note**: This provides structural instruction-data separation. It is not a cryptographic prevention guarantee.
+
+---
+
+## 7. Output Guard Responsibility (Façade — Verified)
+
+`DeterministicOutputGuard.evaluate()` performs all of the following in order:
+
+1. Empty content check → `GuardrailRejectedError`
+2. JSON format validation → `GuardrailRejectedError`
+3. Regex text-level citation scan (`[CTX-...]` patterns) → `CitationValidationError`
+4. Typed list citation validation (`supporting_evidence_references`, `contradicting_evidence_references`, `knowledge_references`) → `CitationValidationError`
+5. RCA empty-citation policy (for `task_type == "rca"`) → `CitationValidationError`
+6. Response size limit (> 100,000 chars) → `GuardrailRejectedError`
+
+---
+
+## 8. Citation Validation Architecture
+
+**Style**: Hybrid — text-level regex scan AND typed list field validation.  
+**Stage**: Occurs **before** Pydantic schema parsing, inside `DeterministicOutputGuard`.  
+**Source of Truth**: `ModelRequest.context_references` (the exact prompt-included citation set).
+
+**What is validated**:
+- Any `[CTX-...]` pattern anywhere in the JSON string (catches hallucinations in observation text)
+- `supporting_evidence_references` list values
+- `contradicting_evidence_references` list values
+- `knowledge_references` list values
+
+**What post-Pydantic validates**: `@field_validator` on `RCADecisionResponse` deduplicates reference lists preserving insertion order. This is a correctness pass, not a security pass.
+
+---
+
+## 9. Provider Interface
+
+- **Protocol**: `LLMProvider` in `app/services/gateway/provider.py`
+- **Contract**: `generate(request: ModelRequest) -> str`
+- **Properties**: `provider_name: str`, `model_id: str`
+- **Mock mode**: Both adapters return deterministic JSON when `settings.LLM_PROVIDER == "mock"`, allowing fully offline unit testing without any credentials.
+
+---
+
+## 10. Verified Provider Capability Matrix
 
 | Category | Groq Adapter | Gemini Adapter |
 | :--- | :--- | :--- |
-| **Provider Name** | `groq` | `gemini` |
-| **Active Model** | `llama-3.3-70b-versatile` | `gemini-1.5-flash` |
-| **Structured Output Mode** | JSON Mode | JSON MIME-type |
-| **Timeout Support** | Configured timeout | Configured timeout |
-| **Usage Metadata** | Normalized usage count | Normalized usage count |
-| **Provider Request ID** | Extracted from headers | Extracted from API metadata |
-| **Finish Reason** | Extracted from choices | Extracted from candidates |
-| **Rate-Limit Mapping** | HTTP 429 to RateLimit | `ResourceExhausted` to RateLimit |
-| **Authentication Mapping** | HTTP 401/403 to Auth | `PermissionDenied` to Auth |
+| **Model Config** | `settings.GROQ_MODEL` | `settings.GEMINI_MODEL` |
+| **Default Model** | `llama-3.3-70b-versatile` | `gemini-1.5-flash` |
+| **SDK** | `groq` (Python SDK) | `google-generativeai` (**deprecated** — see limitations) |
+| **Structured Output** | `response_format={"type": "json_object"}` | `response_mime_type="application/json"` |
+| **Temperature** | `0.0` hardcoded | `0.0` hardcoded |
+| **Timeout** | Passed to Groq SDK `timeout=` | Passed via `request_options={"timeout": ...}` |
+| **Usage Metadata** | Not extracted — default `{}` | Not extracted — default `{}` |
+| **Provider Request ID** | Not extracted — default `None` | Not extracted — default `None` |
+| **Finish Reason** | Not extracted — hardcoded `"stop"` | Not extracted — hardcoded `"stop"` |
+| **Rate-Limit** | HTTP 429 → `ProviderRateLimitError` | `ResourceExhausted` → `ProviderRateLimitError` |
+| **Auth Failure** | HTTP 401/403 → `ProviderAuthenticationError` | `PermissionDenied` → `ProviderAuthenticationError` |
+| **Timeout Mapping** | `APITimeoutError` → `ProviderTimeoutError` | `DeadlineExceeded` → `ProviderTimeoutError` |
+| **Connection Error** | `APIConnectionError` → `ProviderUnavailableError` | `GoogleAPIError` → `ProviderUnavailableError` |
+| **Live Smoke-Test** | NOT EXECUTED — API key unavailable | NOT EXECUTED — API key unavailable |
 
 ---
 
-## 5. Architectural Decisions & Policies
+## 11. Retry Policy
 
-### 5.1 Prompt Assembly & Injection Risk-Reduction
-`PromptAssembler` compiles the context data. Supporting operational knowledge chunks are isolated inside structural `<untrusted_knowledge_context>` tags. System instructions explicitly inform the model to treat this context block strictly as data, reducing prompt injection risk.
-
-### 5.2 LLM Gateway Retry & Fallback
-The `LLMGateway` executes calls with a `BoundedRetryHandler` that only retries retryable exceptions (timeouts, connection drops, rate limits). If initial provider execution fails, the gateway automatically executes the call on the backup fallback provider (restricted to exactly 1 transition). Permanent errors (auth, config, schema, guardrails) do not trigger fallback.
-
-### 5.3 Citation & Format Guardrails
-`DeterministicOutputGuard` parses the JSON output and asserts that every citation reference key maps exactly to a context reference in the request. Hallucinations cause a `CitationValidationError`. Duplicates are deterministically deduplicated during Pydantic schema validation.
-
-### 5.4 NeMo Guardrails Status
-*   **NeMo Integration**: Deferred. The package `nemoguardrails` does not compile natively on Windows under Python 3.14.0 due to dependency compiling issues. The gateway gracefully falls back to local `DeterministicInputGuard` and `DeterministicOutputGuard` and runs NeMo adapters in deferred mode.
-*   **Notice**: Enforce Python 3.11 environment standardization before installing NeMo in production.
+- **Handler**: `BoundedRetryHandler` (`app/services/gateway/retry.py`)
+- **Max retries**: `settings.LLM_MAX_RETRIES` (default: 3)
+- **Backoff**: Exponential, initial 0.5s, factor 2.0x
+- **Retryable**: `ProviderRateLimitError`, `ProviderTimeoutError`, `ProviderUnavailableError`
+- **Non-retryable**: `ProviderConfigurationError`, `ProviderAuthenticationError`, `GuardrailRejectedError`, `CitationValidationError`, `StructuredOutputError`
 
 ---
 
-## 6. Test & Verification Execution Ledger
+## 12. Fallback Policy
 
-*   **Test Command**: `.\venv\Scripts\python.exe -m pytest`
-*   **Total Tests Collected**: 88
-*   **Total Tests Passed**: 86
-*   **Total Tests Failed**: 0
-*   **Total Tests Skipped**: 2 (Live API integration tests skipped since keys are not present in sandbox environment)
-
-### 6.1 Live Smoke-Test Status
-*   **LIVE GROQ SMOKE TEST**: NOT EXECUTED — API key unavailable in sandbox environment
-*   **LIVE GEMINI SMOKE TEST**: NOT EXECUTED — API key unavailable in sandbox environment
+- **Trigger condition**: Transient error, retries exhausted, `LLM_FALLBACK_ENABLED=True`, fallback provider configured and differs from initial
+- **Maximum transitions**: **1** (no ping-pong)
+- **Orientation**: Availability-only — no quality, latency, or cost routing
+- **Metadata**: `fallback_attempted`, `fallback_reason`, `final_provider` truthfully reflect any transition
 
 ---
 
-## 7. Technical Debt, Limitations, and Future Enhancements
-*   **Token Calculations**: Tiktoken or model-native tokenizers should replace basic word-count estimators once models are locked in production.
+## 13. NeMo Runtime Status
+
+- **Status**: Deferred — `nemoguardrails` fails to compile on Python 3.14.0 / Windows
+- **Active guards**: `DeterministicInputGuard` and `DeterministicOutputGuard` are fully active
+- **Adapter boundary**: `NeMoInputGuard` and `NeMoOutputGuard` exist, are instantiated, log a warning, and pass through
+- **Production requirement**: Python 3.11 environment before enabling NeMo
 
 ---
 
-## 8. Exit Checklist
+## 14. Default Test Suite
 
-*   `[x]` **Branch Name Verified**: Active on `feature/phase-7-prompt-guardrails-gateway`.
-*   `[x]` **LLM Provider Agnostic**: Gateways communicate via the `LLMProvider` protocol.
-*   `[x]` **All Tests Pass**: Pytest suite reports 100% success.
-*   `[x]` **No LangGraph Implementation**: No Graph state, nodes, or edges created.
+**Command**: `.\venv\Scripts\python.exe -m pytest`  
+**Config file**: `pytest.ini`  
+
+| Metric | Count |
+| :--- | :--- |
+| Collected | 88 |
+| Passed | 86 |
+| Failed | 0 |
+| Skipped | 2 |
+| Warnings | 1 |
+
+**Warning**: `FutureWarning` from `google-generativeai` — the SDK is fully deprecated and will be replaced by `google-genai`. Functional impact: none today.
+
+**Skipped tests**: Both are in `tests/integration/test_live_gateway.py` and skip because `RUN_LIVE_TESTS` is not set.
+
+---
+
+## 15. Live Smoke Tests
+
+**Command (Groq)**: `$env:RUN_LIVE_TESTS="true"; $env:GROQ_API_KEY="<key>"; .\venv\Scripts\python.exe -m pytest tests/integration/test_live_gateway.py::test_live_groq_smoke -v`  
+**Groq Live Smoke Test**: **NOT EXECUTED — API key unavailable in execution environment**
+
+**Command (Gemini)**: `$env:RUN_LIVE_TESTS="true"; $env:GEMINI_API_KEY="<key>"; .\venv\Scripts\python.exe -m pytest tests/integration/test_live_gateway.py::test_live_gemini_smoke -v`  
+**Gemini Live Smoke Test**: **NOT EXECUTED — API key unavailable in execution environment**
+
+Each live test is independently guarded: missing one provider key skips only that provider's test, not the other.
+
+---
+
+## 16. Technical Debt Assessment
+
+| Item | Classification | Detail |
+| :--- | :--- | :--- |
+| Token estimation (word-based) | Current Limitation | `len(prompt.split())` used for budget — diverges from BPE token counts |
+| `google-generativeai` deprecated | Operational Concern (Active) | Must migrate to `google-genai` SDK before security updates end |
+| Usage metadata not extracted | Current Limitation | `usage_metadata={}` always; token accounting unavailable |
+| Finish reason not extracted | Current Limitation | `finish_reason="stop"` hardcoded; stop sequence vs. max-tokens unknown |
+| Provider request ID not extracted | Current Limitation | `None` always; provider support escalation impaired |
+| Live provider verification | Operational Concern | No live tests executed; real provider behavior not confirmed |
+| SDK version pinning in `requirements.txt` | Deferred Decision | Unpinned in dev; pinned in `requirements-prod.txt` only |
+| Gemini structured output mode | Operational Concern | `response_mime_type` requests JSON but doesn't guarantee schema compliance |
+| Quota / rate-limit behavior | Operational Concern | Provider quotas are operational conditions; retry exhaustion propagates to caller |
+| Fallback availability-only | Architectural Decision | No quality-based, latency-based, or cost-based routing |
+| Model quality evaluation | Not Implemented | No systematic quality comparison between Groq and Gemini |
+| Cost-aware routing | Not Implemented | Gateway selects by config and availability only |
+| Persistent execution tracing | Current Limitation | Metadata in-memory only; no trace store persistence |
+| Prompt version migration policy | Deferred Decision | No formal deprecation or migration policy for old template versions |
+| NeMo runtime | Deferred Decision | Python 3.11 standardization required before activation |
+
+---
+
+## 17. Phase 8 Bounded Orchestration Boundary
+
+Phase 8 (LangGraph Investigation Engine) must implement a bounded, deterministic state graph. Required design constraints:
+
+- Typed investigation state schema
+- Explicit node contracts (single responsibility per node)
+- Maximum iteration count with explicit termination conditions
+- Conditional deterministic routing — no open-ended autonomy
+- Tool allowlist per node
+- Explicit failure and uncertainty states
+- Human-review routing when confidence remains below threshold after max iterations
+
+**Phase 8 must not introduce**: FastAPI, Streamlit, evaluation frameworks, direct repository access, or direct vector store access.
+
+---
+
+## 18. Exit Checklist
+
+- `[x]` Active branch: `feature/phase-7-prompt-guardrails-gateway`
+- `[x]` `.env` verified ignored by git
+- `[x]` `.env.*` variants now ignored; `.env.example` remains tracked
+- `[x]` No API key values in any source file, test, or documentation
+- `[x]` GROQ_API_KEY availability checked — False (key not present)
+- `[x]` GEMINI_API_KEY availability checked — False (key not present)
+- `[x]` Output pipeline traced from actual code — documented accurately
+- `[x]` Architecture diagram matches implementation
+- `[x]` JSON extraction responsibility is explicit (`extract_json_payload` module function)
+- `[x]` Output Guard responsibility is explicit (pipeline façade — documented)
+- `[x]` Citation validation source of truth is `ModelRequest.context_references`
+- `[x]` Provider capability matrix verified against adapter code
+- `[x]` Test summary wording is mathematically correct (86 passed + 2 skipped ≠ "all passed")
+- `[x]` Technical debt section covers real operational limitations
+- `[x]` NeMo status remains truthful (deferred, not active)
+- `[x]` Phase 8 remains bounded orchestration — no LangGraph code introduced
+- `[x]` `requirements.txt` updated with `groq` and `google-generativeai`
+- `[x]` Live tests fixed: single-provider smoke tests disable fallback to avoid validate_configuration rejection
+- `[x]` Default suite: 86 passed, 2 skipped, 0 failed
+- `[x]` Groq live smoke test: NOT EXECUTED — API key unavailable
+- `[x]` Gemini live smoke test: NOT EXECUTED — API key unavailable
+- `[x]` Feature branch pushed
+- `[ ]` Merge into main — awaiting human review
+- `[ ]` v0.7.0 tag — awaiting human review
