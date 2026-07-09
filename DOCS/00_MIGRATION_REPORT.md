@@ -293,5 +293,11 @@ To prevent dimension mismatch issues (e.g. writing 768 fallback vectors into a 3
 
 Both the indexer (`processor.py`) and retriever (`qdrant_service.py`) call `get_active_collection_name()` to resolve the correct, dimension-matched collection name at runtime.
 
+### Fallback Collection Readiness (Operational Limitation)
+Ingestion only runs on the currently active embedding model (Gemini). The fallback collection name is dimension-safe, but is not populated during primary ingestion. If the system falls back to SentenceTransformers at query time, the resolved fallback collection will be empty unless local fallback indexing was explicitly executed separately.
+
 ### Gateway Isolation
 The `LLMGateway` and its adapters do not import, invoke, or depend on the embedding generation services or Qdrant collection management.
+
+### Release Gate Policy
+The project adheres to **Policy A (Strict Dual-Provider Release Gate)**: successful live execution from both Groq and Gemini providers is mandatory. Since the Gemini live smoke test failed due to project quota exhaustion (429 Resource Exhausted), the release status remains **BLOCKED**. No merge into `main` or `v0.7.0` tagging is permitted until successful Gemini live generation is verified with an active key.

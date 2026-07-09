@@ -77,13 +77,15 @@ The `BaseEmbeddingProvider` interface decouples vector generation from underlyin
 *   **MockEmbeddingProvider**: Computes L2-normalized float vectors of configured dimensions (default: 3072) by seeding a pseudorandom number generator with the SHA-256 hash of the content. This yields deterministic, scale-invariant vectors that simulate cosine similarity calculations entirely offline.
 *   **SentenceTransformerEmbeddingProvider**: Real local embedding provider using the `sentence_transformers` library. Generates normalized L2 unit vectors and supports configurable model names (default: `all-MiniLM-L6-v2`) and execution devices (`cpu` / `cuda`).
 
-### 4.1 Gemini Embeddings (Production)
-For production deployments, the system uses Google Gemini embedding services:
-*   **Primary Embedding Model**: `models/gemini-embedding-2-preview` (configured via `settings.GEMINI_EMBEDDING_MODEL`).
-*   **Primary Vector Dimension**: `3072` (configured via `settings.GEMINI_EMBEDDING_DIMENSION`).
-*   **Embedding SDK/Library**: `langchain-google-genai` (using `GoogleGenerativeAIEmbeddings`).
-*   **Local Fallback Model**: `all-mpnet-base-v2` (configured via `settings.LOCAL_EMBEDDING_MODEL`).
-*   **Local Fallback Dimension**: `768` (configured via `settings.LOCAL_EMBEDDING_DIMENSION`).
+### 4.1 Embedding Provider Environment Roles
+The different embedding providers in the codebase serve distinct operational roles:
+
+| Provider Class | Underlying Model | Dimension | Target Environment / Role |
+| :--- | :--- | :--- | :--- |
+| `MockEmbeddingProvider` | Deterministic Content Hash | `3072` (Configurable) | **Offline Unit Tests** — simulates Gemini dimensions and similarity calculations with zero network/disk dependencies. |
+| `SentenceTransformerEmbeddingProvider` | `all-MiniLM-L6-v2` | `384` | **Local Development** — lightweight model for testing custom search queries locally without consuming Gemini API quota. |
+| `GeminiEmbeddingProvider` | `models/gemini-embedding-2-preview` | `3072` | **Production Primary** — high-precision enterprise semantic search space. |
+| `SentenceTransformer` (via `embedding.py`) | `all-mpnet-base-v2` | `768` | **Production Fallback** — high-quality local transformer model engaged when the Gemini API is unreachable. |
 
 ### 4.2 Shared Authentication vs Separate Configuration
 The same `GEMINI_API_KEY` may be used to authenticate both the Gemini Embedding pipeline and the LLM Gateway generation workloads. However, the model configurations are strictly separated. The LLM Gateway is configured via `settings.GEMINI_MODEL` (e.g. `gemini-2.0-flash`), which is validated at runtime to be distinct from `settings.GEMINI_EMBEDDING_MODEL` using a Pydantic Settings model validator.
@@ -96,6 +98,14 @@ To enforce strict isolation:
     - Fallback active collection: `f"{settings.QDRANT_COLLECTION}_all-mpnet-base-v2_768"`
 2.  **Degraded-Mode Signaling**: When the Gemini probe fails and the system engages local fallback, the active collection name is updated dynamically using `get_active_collection_name()`. The retriever logs this transition and flags `degraded_mode=True` within the execution metadata.
 3.  **Reindex Requirements**: When switching embedding models or spaces, the entire knowledge database must be re-ingested. Mutating an existing collection to adapt to a different semantic space or dimension is prohibited. A new collection is created, populated from scratch, and selected at runtime.
+
+### 4.4 Fallback Collection Readiness (Operational Limitation)
+Ingestion (`processor.py`) is performed only on the currently active embedding space. During primary production ingestion, vectors are written only to the Gemini-backed collection. The local fallback collection is **not** populated in parallel.
+If the Gemini API fails at query time and the system dynamically switches to the local fallback space:
+- The query vector is successfully generated with `all-mpnet-base-v2` (768 dimensions).
+- Qdrant queries the fallback collection (`f"{settings.QDRANT_COLLECTION}_all-mpnet-base-v2_768"`).
+- Since this fallback collection is empty (never ingested), retrieval returns an empty set of chunks.
+This is a known operational limitation of the fallback mechanism. The collection name transition is dimension-safe, but the system relies on a separate local ingestion cycle to make local fallback functional.
 
 ---
 

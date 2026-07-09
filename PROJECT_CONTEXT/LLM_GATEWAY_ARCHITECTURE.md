@@ -187,7 +187,10 @@ Retried with exponential backoff up to `LLM_MAX_RETRIES` (default: 3):
 Context budget limits are estimated using word-splitting (`len(prompt.split())`). Model-native tokenizers (e.g., tiktoken) are required for production accuracy. Word counts diverge from BPE token counts depending on vocabulary and language.
 
 ### google-genai SDK Migration — *Completed*
-The Gemini adapter was successfully migrated from the deprecated `google-generativeai` package to the modern, supported `google-genai` SDK. The deprecation warning is resolved.
+The Gemini adapter was successfully migrated from the deprecated `google-generativeai` package to the modern, supported `google-genai` SDK. The old `google-generativeai` SDK deprecation warning is fully resolved.
+
+### google-genai Internals warning — *Python Compatibility Warning*
+The new `google-genai` SDK (specifically `google/genai/types.py`) emits a `DeprecationWarning` under Python 3.14.0 regarding `_UnionGenericAlias` which is slated for removal in Python 3.17. This warning is internal to the SDK's types submodule and has no functional impact on runtime execution.
 
 ### Live Provider Verification Status — *Operational Status (2026-07-09)*
 - **Groq (Llama 3.3)**: **PASSED** (2.73s, using key in `.env`). Basic connectivity, response formatting, extraction, and validation are verified.
