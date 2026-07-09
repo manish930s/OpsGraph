@@ -147,6 +147,8 @@ class HybridRetriever:
         embedding_mode = "mock"
         if isinstance(self.embedding_provider, SentenceTransformerEmbeddingProvider):
             embedding_mode = "sentence-transformer"
+        elif type(self.embedding_provider).__name__ == "GeminiEmbeddingProvider":
+            embedding_mode = "gemini"
             
         reranker_mode = self.reranker.mode
 

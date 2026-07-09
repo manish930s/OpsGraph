@@ -2,6 +2,7 @@ from app.services.knowledge.base_embedding import (
     BaseEmbeddingProvider,
     MockEmbeddingProvider,
     SentenceTransformerEmbeddingProvider,
+    GeminiEmbeddingProvider,
 )
 from app.services.knowledge.vector_store_base import BaseVectorStore
 from app.services.knowledge.qdrant_adapter import QdrantVectorStoreAdapter
@@ -15,6 +16,7 @@ __all__ = [
     "BaseEmbeddingProvider",
     "MockEmbeddingProvider",
     "SentenceTransformerEmbeddingProvider",
+    "GeminiEmbeddingProvider",
     "BaseVectorStore",
     "QdrantVectorStoreAdapter",
     "KnowledgeLoader",

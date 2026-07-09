@@ -77,3 +77,31 @@ class SentenceTransformerEmbeddingProvider(BaseEmbeddingProvider):
                 vec = vec / norm
             results.append(vec.tolist())
         return results
+
+
+class GeminiEmbeddingProvider(BaseEmbeddingProvider):
+    """
+    Real Gemini embedding provider using langchain-google-genai.
+    """
+    def __init__(self, model_name: str | None = None, api_key: str | None = None):
+        from app.config import settings
+        self.model_name = model_name or settings.GEMINI_EMBEDDING_MODEL
+        self.api_key = api_key or settings.GEMINI_API_KEY
+        self._model = None
+
+    def _get_model(self):
+        if not self._model:
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+            if not self.api_key or self.api_key == "mock":
+                raise ValueError("Gemini API key is required for GeminiEmbeddingProvider.")
+            self._model = GoogleGenerativeAIEmbeddings(
+                model=self.model_name,
+                google_api_key=self.api_key
+            )
+        return self._model
+
+    def get_embedding(self, text: str) -> list[float]:
+        return self._get_model().embed_query(text)
+
+    def get_embeddings(self, texts: list[str]) -> list[list[float]]:
+        return self._get_model().embed_documents(texts)

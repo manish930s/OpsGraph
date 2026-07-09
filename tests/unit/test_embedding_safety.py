@@ -83,3 +83,45 @@ def test_fallback_embedding_on_gemini_failure(mock_embeddings_class):
         
         col = get_active_collection_name()
         assert "all-mpnet-base-v2_768" in col
+
+
+from app.services.knowledge import GeminiEmbeddingProvider, HybridRetriever, KnowledgeCache, FlashRankReranker, QdrantVectorStoreAdapter
+from app.schemas.evidence import EvidenceBundle, ConfidenceSummary, ConfidenceComponents
+from app.schemas.knowledge import KnowledgeChunk
+
+@patch("langchain_google_genai.GoogleGenerativeAIEmbeddings")
+def test_gemini_embedding_provider_retriever_metadata(mock_genai_embeddings):
+    """Verify that GeminiEmbeddingProvider maps correctly to 'gemini' in RetrievalExecutionMetadata."""
+    mock_model = MagicMock()
+    mock_model.embed_query.return_value = [0.5] * 3072
+    mock_genai_embeddings.return_value = mock_model
+
+    with patch("app.config.settings.GEMINI_API_KEY", "valid-fake-key"):
+        provider = GeminiEmbeddingProvider(model_name="models/gemini-embedding-2-preview")
+        
+        # Test vector dimension and query embedding
+        vec = provider.get_embedding("query")
+        assert len(vec) == 3072
+        assert mock_model.embed_query.call_count == 1
+
+        # Test retriever metadata embedding_mode reporting
+        store = QdrantVectorStoreAdapter()
+        store.create_collection("temp_col", 3072)
+        
+        # Mock Reranker to avoid complex model loads
+        mock_reranker = MagicMock(spec=FlashRankReranker)
+        mock_reranker.mode = "flashrank"
+        mock_reranker.rerank.return_value = []
+
+        retriever = HybridRetriever(
+            vector_store=store,
+            embedding_provider=provider,
+            reranker=mock_reranker,
+            cache=KnowledgeCache(),
+            collection_name="temp_col"
+        )
+        
+        bundle = retriever.retrieve("search query", limit=1)
+        assert bundle.execution_metadata.embedding_mode == "gemini"
+        
+        store.delete_collection("temp_col")
