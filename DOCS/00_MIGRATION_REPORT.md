@@ -11,8 +11,8 @@
 
 Phase 7 delivers the first controlled model execution layer in OpsGraph AI. It provides a unified, provider-agnostic bridge for structured model execution between the Deterministic Context Builder (Phase 6) and the future Bounded LangGraph Investigation Engine (Phase 8). Prompt Assembly reduces prompt injection risk by structurally isolating untrusted retrieved knowledge from system instructions. Template versioning is managed via a registry. The LLM Gateway orchestrates input/output safety guards, exponential-backoff retries, one-transition provider fallback, JSON extraction, citation validation, and structured response parsing. NeMo Guardrails operates as a deferred adapter boundary; deterministic application guards are fully active.
 
-**Default offline-safe suite**: 89 collected, **87 passed**, 0 failed, 2 skipped (opt-in live tests).  
-**Groq live smoke test**: **PASSED** (2.73s, using `llama-3.3-70b-versatile`).  
+**Default offline-safe suite**: 98 collected, **96 passed**, 0 failed, 2 skipped (opt-in live tests).
+**Groq live smoke test**: **PASSED** (2.73s, using `llama-3.3-70b-versatile`).
 **Gemini live smoke test**: **FAILED — RATE LIMIT / QUOTA EXHAUSTED** (429 RESOURCE_EXHAUSTED, limit: 0, model: `gemini-2.0-flash`).  
 **Merge status**: **BLOCKED** — live Gemini verification failed due to project/key quota constraints.
 
@@ -201,8 +201,8 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 
 | Metric | Count |
 | :--- | :--- |
-| Collected | 93 |
-| Passed | 91 |
+| Collected | 98 |
+| Passed | 96 |
 | Failed | 0 |
 | Skipped | 2 (integration live tests) |
 | Warnings | 2 (1 google-genai type deprecation warning + 1 Logfire warning in mock tests) |
@@ -257,7 +257,7 @@ Phase 8 (LangGraph Investigation Engine) must implement a bounded, deterministic
 - `[x]` Phase 8 remains bounded orchestration — no LangGraph code introduced
 - `[x]` `requirements.txt` updated with `groq` and `google-genai`
 - `[x]` Live tests fixed: single-provider smoke tests disable fallback
-- `[x]` Default suite: **87 passed, 2 skipped, 0 failed**
+- `[x]` Default suite: **96 passed, 2 skipped, 0 failed**
 - `[x]` Groq live smoke test: **PASSED**
 - `[!]` Gemini live smoke test: **FAILED (429 Quota Exhausted)** — **MERGE BLOCKER**
 - `[x]` Feature branch pushed to `origin/feature/phase-7-prompt-guardrails-gateway`

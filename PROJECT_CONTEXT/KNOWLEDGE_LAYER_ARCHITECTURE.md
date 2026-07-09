@@ -99,13 +99,36 @@ To enforce strict isolation:
 2.  **Degraded-Mode Signaling**: When the Gemini probe fails and the system engages local fallback, the active collection name is updated dynamically using `get_active_collection_name()`. The retriever logs this transition and flags `degraded_mode=True` within the execution metadata.
 3.  **Reindex Requirements**: When switching embedding models or spaces, the entire knowledge database must be re-ingested. Mutating an existing collection to adapt to a different semantic space or dimension is prohibited. A new collection is created, populated from scratch, and selected at runtime.
 
-### 4.4 Fallback Collection Readiness (Operational Limitation)
-Ingestion (`processor.py`) is performed only on the currently active embedding space. During primary production ingestion, vectors are written only to the Gemini-backed collection. The local fallback collection is **not** populated in parallel.
-If the Gemini API fails at query time and the system dynamically switches to the local fallback space:
-- The query vector is successfully generated with `all-mpnet-base-v2` (768 dimensions).
-- Qdrant queries the fallback collection (`f"{settings.QDRANT_COLLECTION}_all-mpnet-base-v2_768"`).
-- Since this fallback collection is empty (never ingested), retrieval returns an empty set of chunks.
-This is a known operational limitation of the fallback mechanism. The collection name transition is dimension-safe, but the system relies on a separate local ingestion cycle to make local fallback functional.
+### 4.4 Ingestion & Search Scenarios (Verified Behavior)
+The behavior of the RAG pipeline is categorized into the following verified runtime scenarios:
+
+#### Scenario A: Dense Collection Populated (Normal Mode)
+Normal hybrid retrieval proceeds:
+1. Dense search queries the active collection and returns semantic candidates.
+2. BM25 lexical search runs in parallel, querying its local in-memory corpus for keyword candidates.
+3. Candidates are fused using Reciprocal Rank Fusion (RRF) and reranked using FlashRank.
+4. A populated, high-precision `KnowledgeBundle` is returned.
+
+#### Scenario B: Dense Collection Empty (Local Fallback)
+If the resolved collection exists in Qdrant but contains zero points (or dense search returns zero candidates):
+1. Dense search returns `[]` without error.
+2. BM25 lexical search executes successfully and continues to return keyword candidates.
+3. RRF receives `dense_results = []` and a non-empty `lexical_results` list. It processes the lexical candidates successfully, setting the provenance `dense_rank = None` and `dense_score = None`, and flags the channel as `["lexical"]`.
+4. Reranking (via FlashRank or Jaccard overlap fallback) operates normally on the lexical-only candidates.
+5. The pipeline completes successfully and returns a lexical-only `KnowledgeBundle`.
+
+#### Scenario C: Dense Collection Missing (Hard Failure)
+If the resolved collection does not exist in Qdrant:
+1. Qdrant raises an exception (`UnexpectedResponse` with status 404).
+2. The Qdrant adapter catches, logs, and re-raises this exception.
+3. The exception propagates immediately, causing a **hard failure** of the entire retrieval query before BM25 lexical search results can be fused or returned.
+
+#### Scenario D: Embedding Provider Fallback
+When the Gemini embedding probe fails and local MPNet becomes active:
+1. **Collection Routing**: The active collection name is dynamically updated to the 768-dimension suffix: `f"{settings.QDRANT_COLLECTION}_all-mpnet-base-v2_768"`.
+2. **Collection Readiness**: Since ingestion only populates the active collection (Gemini-backed), the fallback collection will be empty unless a separate local fallback ingestion cycle was explicitly run. If empty, the system falls back to Scenario B (lexical-only).
+3. **Lexical Channel Availability**: The BM25 lexical search channel is fully available and unaffected by the embedding provider status.
+4. **Degraded-Mode Metadata**: The retriever metadata reports `embedding_mode = "sentence-transformer-fallback"`. If other fallbacks occur (e.g. vector store in memory or Jaccard reranking), `degraded_mode` is set to `True` and the detailed reason is appended to `fallback_reasons`.
 
 ---
 
