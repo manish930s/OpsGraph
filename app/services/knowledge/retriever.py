@@ -146,7 +146,11 @@ class HybridRetriever:
         
         embedding_mode = "mock"
         if isinstance(self.embedding_provider, SentenceTransformerEmbeddingProvider):
-            embedding_mode = "sentence-transformer"
+            model_name = getattr(self.embedding_provider, "model_name", "")
+            if "mpnet" in model_name:
+                embedding_mode = "sentence-transformer-fallback"
+            else:
+                embedding_mode = "sentence-transformer"
         elif type(self.embedding_provider).__name__ == "GeminiEmbeddingProvider":
             embedding_mode = "gemini"
             

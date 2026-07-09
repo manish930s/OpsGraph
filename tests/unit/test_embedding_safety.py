@@ -125,3 +125,50 @@ def test_gemini_embedding_provider_retriever_metadata(mock_genai_embeddings):
         assert bundle.execution_metadata.embedding_mode == "gemini"
         
         store.delete_collection("temp_col")
+
+
+from app.services.knowledge import SentenceTransformerEmbeddingProvider
+
+def test_sentence_transformer_metadata_mapping():
+    """Verify that SentenceTransformerEmbeddingProvider maps model names to correct modes."""
+    # 1. Dev Model (all-MiniLM-L6-v2)
+    provider = SentenceTransformerEmbeddingProvider(model_name="all-MiniLM-L6-v2")
+    with patch.object(provider, "get_embedding", return_value=[0.1]*384):
+        store = MagicMock()
+        store.mode = "qdrant"
+        store.search.return_value = []
+        
+        mock_reranker = MagicMock(spec=FlashRankReranker)
+        mock_reranker.mode = "flashrank"
+        mock_reranker.rerank.return_value = []
+
+        retriever = HybridRetriever(
+            vector_store=store,
+            embedding_provider=provider,
+            reranker=mock_reranker,
+            cache=KnowledgeCache(),
+            collection_name="temp_col"
+        )
+        bundle = retriever.retrieve("query", limit=1)
+        assert bundle.execution_metadata.embedding_mode == "sentence-transformer"
+
+    # 2. Fallback Model (all-mpnet-base-v2)
+    provider = SentenceTransformerEmbeddingProvider(model_name="all-mpnet-base-v2")
+    with patch.object(provider, "get_embedding", return_value=[0.1]*768):
+        store = MagicMock()
+        store.mode = "qdrant"
+        store.search.return_value = []
+        
+        mock_reranker = MagicMock(spec=FlashRankReranker)
+        mock_reranker.mode = "flashrank"
+        mock_reranker.rerank.return_value = []
+
+        retriever = HybridRetriever(
+            vector_store=store,
+            embedding_provider=provider,
+            reranker=mock_reranker,
+            cache=KnowledgeCache(),
+            collection_name="temp_col"
+        )
+        bundle = retriever.retrieve("query", limit=1)
+        assert bundle.execution_metadata.embedding_mode == "sentence-transformer-fallback"
