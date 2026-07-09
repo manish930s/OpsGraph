@@ -202,14 +202,15 @@ def test_groq_provider_success(mock_groq_class):
         res = provider.generate(req)
         assert res == '{"response_id":"R-1"}'
 
-@patch("google.generativeai.GenerativeModel")
-@patch("google.generativeai.configure")
-def test_gemini_provider_success(mock_configure, mock_model_class):
+@patch("google.genai.Client")
+def test_gemini_provider_success(mock_client_class):
     with patch("app.config.settings.LLM_PROVIDER", "live"):
-        mock_model = MagicMock()
-        mock_model_class.return_value = mock_model
-        mock_model.generate_content.return_value = MagicMock(text='{"response_id":"R-2"}')
-        
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.text = '{"response_id":"R-2"}'
+        mock_client.models.generate_content.return_value = mock_response
+
         provider = GeminiProvider(api_key="valid-key", model_name="gemini-flash")
         req = ModelRequest(
             request_id="R1", task_type="rca", prompt_template_id="investigation", prompt_version="v1",

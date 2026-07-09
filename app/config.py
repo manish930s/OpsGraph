@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     # --- GEMINI EMBEDDINGS ---
     GEMINI_API_KEY: str | None = Field(default=None)
+    GEMINI_EMBEDDING_MODEL: str = Field(default="models/gemini-embedding-2-preview")
+    GEMINI_EMBEDDING_DIMENSION: int = Field(default=3072)
+    LOCAL_EMBEDDING_MODEL: str = Field(default="all-mpnet-base-v2")
+    LOCAL_EMBEDDING_DIMENSION: int = Field(default=768)
 
     # --- KNOWLEDGE LAYER CONFIG ---
     EMBEDDING_PROVIDER: str = Field(default="mock")  # "mock" or "sentence-transformer"
@@ -37,7 +41,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = Field(default="llama-3.3-70b-versatile")
     LLM_PROVIDER: str = Field(default="mock")
     LLM_DEFAULT_PROVIDER: str = Field(default="groq")
-    GEMINI_MODEL: str = Field(default="gemini-1.5-flash")
+    GEMINI_MODEL: str = Field(default="gemini-2.0-flash")  # Updated from gemini-1.5-flash (deprecated in v1beta)
     LLM_REQUEST_TIMEOUT_SECONDS: float = Field(default=30.0)
     LLM_MAX_RETRIES: int = Field(default=3)
     LLM_FALLBACK_ENABLED: bool = Field(default=True)
@@ -72,6 +76,23 @@ class Settings(BaseSettings):
     # --- CONFIDENCE THRESHOLDS ---
     CONFIDENCE_STRONG_THRESHOLD: float = Field(default=0.80)
     CONFIDENCE_MODERATE_THRESHOLD: float = Field(default=0.60)
+
+    @model_validator(mode="after")
+    def validate_embedding_and_llm_configs(self) -> "Settings":
+        if self.GEMINI_EMBEDDING_MODEL == self.GEMINI_MODEL:
+            raise ValueError(
+                f"Gemini embedding model '{self.GEMINI_EMBEDDING_MODEL}' cannot be the same as "
+                f"Gemini LLM generation model '{self.GEMINI_MODEL}'."
+            )
+        if self.GEMINI_EMBEDDING_DIMENSION <= 0:
+            raise ValueError(
+                f"GEMINI_EMBEDDING_DIMENSION must be positive, got {self.GEMINI_EMBEDDING_DIMENSION}"
+            )
+        if self.LOCAL_EMBEDDING_DIMENSION <= 0:
+            raise ValueError(
+                f"LOCAL_EMBEDDING_DIMENSION must be positive, got {self.LOCAL_EMBEDDING_DIMENSION}"
+            )
+        return self
 
 # Instantiate settings
 settings = Settings()

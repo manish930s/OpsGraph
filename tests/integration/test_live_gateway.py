@@ -6,13 +6,9 @@ from app.services.gateway import LLMGateway
 from app.services.gateway.providers.groq_provider import GroqProvider
 from app.services.gateway.providers.gemini_provider import GeminiProvider
 
-RUN_LIVE = os.environ.get("RUN_LIVE_TESTS", "").lower() in ("true", "1", "yes")
-
-# Mark all tests in this file as live_api and skip if not RUN_LIVE
-pytestmark = [
-    pytest.mark.live_api,
-    pytest.mark.skipif(not RUN_LIVE, reason="Live API tests not enabled. Set RUN_LIVE_TESTS=true to run them.")
-]
+# RUN_LIVE_TESTS gate is enforced by tests/integration/conftest.py at collection time.
+# Per-provider guards use settings (loaded from .env via Pydantic Settings).
+pytestmark = [pytest.mark.live_api]
 
 @pytest.fixture
 def minimal_request():
@@ -40,7 +36,8 @@ def minimal_request():
         context_references=("CTX-1",)
     )
 
-@pytest.mark.skipif(not os.environ.get("GROQ_API_KEY"), reason="GROQ_API_KEY not set in environment.")
+# Per-provider guards use settings (loaded from .env via Pydantic Settings) not os.environ directly
+@pytest.mark.skipif(not settings.GROQ_API_KEY, reason="GROQ_API_KEY not configured in settings (check .env).")
 def test_live_groq_smoke(minimal_request):
     # Temporarily set provider config to live to bypass mock checks.
     # Disable fallback so validate_configuration does not require the fallback provider key.
@@ -59,7 +56,7 @@ def test_live_groq_smoke(minimal_request):
         assert "CTX-1" in response.parsed_response.supporting_evidence_references
         assert response.execution_metadata.fallback_attempted is False
 
-@pytest.mark.skipif(not os.environ.get("GEMINI_API_KEY"), reason="GEMINI_API_KEY not set in environment.")
+@pytest.mark.skipif(not settings.GEMINI_API_KEY, reason="GEMINI_API_KEY not configured in settings (check .env).")
 def test_live_gemini_smoke(minimal_request):
     # Temporarily set provider config to live to bypass mock checks.
     # Disable fallback so validate_configuration does not require the fallback provider key.

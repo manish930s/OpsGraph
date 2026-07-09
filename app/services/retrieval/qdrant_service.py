@@ -2,7 +2,7 @@ import logfire
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from app.config import settings
-from app.services.retrieval.embedding import embed_query
+from app.services.retrieval.embedding import embed_query, get_active_collection_name
 
 
 # Initialize Qdrant Client
@@ -18,10 +18,11 @@ def search_enterprise_knowledge(query: str, limit: int = 8):
     """
     try:
         query_vector = embed_query(query)
+        collection = get_active_collection_name()
 
         # Using query_points - the modern standard for Qdrant
         response = client.query_points(
-            collection_name=settings.QDRANT_COLLECTION,
+            collection_name=collection,
             query=query_vector,
             limit=limit,
             with_payload=True # JSON
