@@ -70,22 +70,26 @@ The assembler separates instruction from data at compile time:
 | Category | Groq Adapter | Gemini Adapter |
 | :--- | :--- | :--- |
 | **Config Key** | `LLM_DEFAULT_PROVIDER = "groq"` | `LLM_DEFAULT_PROVIDER = "gemini"` |
-| **Model Config** | `settings.GROQ_MODEL` (default: `llama-3.3-70b-versatile`) | `settings.GEMINI_MODEL` (default: `gemini-1.5-flash`) |
-| **SDK** | `groq` (Groq Python SDK) | `google-generativeai` (deprecated; see §10) |
-| **Structured Output Mode** | `response_format={"type": "json_object"}` | `response_mime_type="application/json"` via `GenerationConfig` |
+| **Model Config** | `settings.GROQ_MODEL` (default: `llama-3.3-70b-versatile`) | `settings.GEMINI_MODEL` (default: `gemini-2.0-flash`) |
+| **SDK** | `groq` (Groq Python SDK) | `google-genai` (Migrated successfully) |
+| **Structured Output Mode** | `response_format={"type": "json_object"}` | `response_mime_type="application/json"` |
 | **Temperature** | `0.0` (hardcoded deterministic) | `0.0` (hardcoded deterministic) |
-| **Timeout** | `request.timeout_configuration` → Groq SDK `timeout=` param | `request.timeout_configuration` → `request_options={"timeout": ...}` |
-| **Usage Metadata** | Not extracted by adapter (not exposed in `ValidatedModelResponse`) | Not extracted by adapter (not exposed in `ValidatedModelResponse`) |
+| **Timeout** | `request.timeout_configuration` → Groq SDK `timeout=` param | `request.timeout_configuration` → types.GenerateContentConfig |
+| **Usage Metadata** | Not extracted by adapter | Not extracted by adapter |
 | **Provider Request ID** | Not extracted by adapter | Not extracted by adapter |
 | **Finish Reason** | Not extracted; hardcoded `"stop"` in gateway | Not extracted; hardcoded `"stop"` in gateway |
-| **Rate-Limit Mapping** | `APIStatusError` HTTP 429 → `ProviderRateLimitError` | `ResourceExhausted` → `ProviderRateLimitError` |
-| **Auth Failure Mapping** | `APIStatusError` HTTP 401/403 → `ProviderAuthenticationError` | `PermissionDenied` → `ProviderAuthenticationError` |
-| **Timeout Mapping** | `APITimeoutError` → `ProviderTimeoutError` | `DeadlineExceeded` → `ProviderTimeoutError` |
+| **Rate-Limit Mapping** | `APIStatusError` HTTP 429 → `ProviderRateLimitError` | `RESOURCE_EXHAUSTED` → `ProviderRateLimitError` |
+| **Auth Failure Mapping** | `APIStatusError` HTTP 401/403 → `ProviderAuthenticationError` | `401/403/permission` → `ProviderAuthenticationError` |
+| **Timeout Mapping** | `APITimeoutError` → `ProviderTimeoutError` | `timeout/deadline` → `ProviderTimeoutError` |
 | **Connection Error Mapping** | `APIConnectionError` → `ProviderUnavailableError` | `GoogleAPIError` → `ProviderUnavailableError` |
 | **Mock Mode** | Returns deterministic JSON when `LLM_PROVIDER = "mock"` | Returns deterministic JSON when `LLM_PROVIDER = "mock"` |
-| **Live Smoke-Test Status** | NOT EXECUTED — API key unavailable in current environment | NOT EXECUTED — API key unavailable in current environment |
+| **Live Smoke-Test Status** | **PASSED** (2.73s) | **FAILED** (429 Quota Exhausted) |
 
-> **Capability note**: `usage_metadata`, `provider_request_id`, and `finish_reason` fields exist in `LLMExecutionMetadata` but are populated with defaults (`{}`, `None`, `"stop"`) because neither adapter currently extracts them from provider SDK responses. These are documented as current limitations in §10.
+### Workload Configuration Separation
+`GeminiProvider` is used exclusively for LLM text generation. It does **not** import, invoke, or depend on any embedding models or Qdrant collection management. 
+- **LLM Generation Model**: Configured via `settings.GEMINI_MODEL` (default: `gemini-2.0-flash`).
+- **Embedding Model**: Configured separately via `settings.GEMINI_EMBEDDING_MODEL` (default: `models/gemini-embedding-2-preview`).
+A Pydantic `model_validator` in `config.py` prevents accidental reuse or config leakage between the two workloads.
 
 ---
 
@@ -182,8 +186,12 @@ Retried with exponential backoff up to `LLM_MAX_RETRIES` (default: 3):
 ### Token Estimation — *Current Limitation*
 Context budget limits are estimated using word-splitting (`len(prompt.split())`). Model-native tokenizers (e.g., tiktoken) are required for production accuracy. Word counts diverge from BPE token counts depending on vocabulary and language.
 
-### google-generativeai SDK Deprecation — *Operational Concern (Active)*
-The installed `google-generativeai` SDK is fully deprecated. The Gemini adapter emits a `FutureWarning` during import. Migration to the `google-genai` package (the replacement SDK) is required before the current package stops receiving security updates. This does not affect functionality today but constitutes a dependency risk.
+### google-genai SDK Migration — *Completed*
+The Gemini adapter was successfully migrated from the deprecated `google-generativeai` package to the modern, supported `google-genai` SDK. The deprecation warning is resolved.
+
+### Live Provider Verification Status — *Operational Status (2026-07-09)*
+- **Groq (Llama 3.3)**: **PASSED** (2.73s, using key in `.env`). Basic connectivity, response formatting, extraction, and validation are verified.
+- **Gemini (Gemini 2.0 Flash)**: **FAILED — 429 Resource Exhausted**. The API key successfully authorized, but the target project has a quota limit of 0 for free tier requests or input tokens. Connectivity and exception mapping are verified, but execution is blocked by quota constraints.
 
 ### Usage Metadata and Finish Reason Not Extracted — *Current Limitation*
 Neither the Groq nor Gemini adapter currently extracts `usage_metadata` (token counts) or `finish_reason` from the actual provider SDK response. These fields exist in `LLMExecutionMetadata` but are populated with defaults. Extracting them would improve observability and token-cost accounting.

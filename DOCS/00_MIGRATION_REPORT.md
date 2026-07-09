@@ -1,9 +1,9 @@
 # OpsGraph AI — Phase 7 Final Migration Report
-**Document Status:** Final Verification Pass Complete  
+**Document Status:** Live Verification Pass Complete (Verification Blocked)  
 **Phase:** Phase 7 — Prompt Assembly, Guardrails, and Provider-Agnostic LLM Gateway  
 **Execution Date:** 2026-07-09  
 **Python Runtime:** CPython 3.14.0 (Windows)  
-**Live Verification Status:** BLOCKED — provider API keys not present in execution environment  
+**Live Verification Status:** BLOCKED — Gemini API Key Rate Limit/Quota Exhaustion  
 
 ---
 
@@ -11,17 +11,17 @@
 
 Phase 7 delivers the first controlled model execution layer in OpsGraph AI. It provides a unified, provider-agnostic bridge for structured model execution between the Deterministic Context Builder (Phase 6) and the future Bounded LangGraph Investigation Engine (Phase 8). Prompt Assembly reduces prompt injection risk by structurally isolating untrusted retrieved knowledge from system instructions. Template versioning is managed via a registry. The LLM Gateway orchestrates input/output safety guards, exponential-backoff retries, one-transition provider fallback, JSON extraction, citation validation, and structured response parsing. NeMo Guardrails operates as a deferred adapter boundary; deterministic application guards are fully active.
 
-**Default offline-safe suite**: 88 collected, **86 passed**, 0 failed, 2 skipped (opt-in live tests).  
-**Groq live smoke test**: NOT EXECUTED — `GROQ_API_KEY` not present in execution environment.  
-**Gemini live smoke test**: NOT EXECUTED — `GEMINI_API_KEY` not present in execution environment.  
-**Merge status**: BLOCKED — live provider verification is a required pre-merge gate condition.
+**Default offline-safe suite**: 89 collected, **87 passed**, 0 failed, 2 skipped (opt-in live tests).  
+**Groq live smoke test**: **PASSED** (2.73s, using `llama-3.3-70b-versatile`).  
+**Gemini live smoke test**: **FAILED — RATE LIMIT / QUOTA EXHAUSTED** (429 RESOURCE_EXHAUSTED, limit: 0, model: `gemini-2.0-flash`).  
+**Merge status**: **BLOCKED** — live Gemini verification failed due to project/key quota constraints.
 
 ---
 
 ## 2. Repository State
 
 - **Active Branch**: `feature/phase-7-prompt-guardrails-gateway`
-- **Working Tree State**: Clean — no uncommitted modifications
+- **Working Tree State**: Clean — no uncommitted modifications (after tracking conftest and embedding safety files)
 - **Python Runtime**: CPython 3.14.0 (Windows x64)
 
 ---
@@ -29,11 +29,11 @@ Phase 7 delivers the first controlled model execution layer in OpsGraph AI. It p
 ## 3. Secret Safety Verification
 
 - `.env` is listed in `.gitignore` (exact match)
-- `.env.*` variants are now also listed in `.gitignore` with `!.env.example` exclusion (added in this pass)
+- `.env.*` variants are listed in `.gitignore` with `!.env.example` exclusion
 - `git check-ignore .env` confirms `.env` is ignored
 - `.env.example` is tracked and contains only placeholder empty strings — no real credentials
-- `GROQ_API_KEY` available in current execution environment: **False**
-- `GEMINI_API_KEY` available in current execution environment: **False**
+- `GROQ_API_KEY` available in current execution environment: **True**
+- `GEMINI_API_KEY` available in current execution environment: **True**
 - No API key values appear in any source file, test file, migration report, or architecture document
 - Search of tracked files confirms no real credentials are staged or committed
 
@@ -41,7 +41,7 @@ Phase 7 delivers the first controlled model execution layer in OpsGraph AI. It p
 
 ## 4. File Ledger
 
-### Files Created (Phase 7)
+### Files Created (Phase 7 & Verification Pass)
 
 | Path | Purpose |
 | :--- | :--- |
@@ -61,24 +61,28 @@ Phase 7 delivers the first controlled model execution layer in OpsGraph AI. It p
 | `app/services/gateway/errors.py` | `GatewayError` hierarchy |
 | `app/services/gateway/provider.py` | `LLMProvider` protocol |
 | `app/services/gateway/providers/groq_provider.py` | Groq SDK adapter |
-| `app/services/gateway/providers/gemini_provider.py` | Gemini SDK adapter |
+| `app/services/gateway/providers/gemini_provider.py` | Gemini SDK adapter (google-genai) |
 | `app/services/gateway/providers/__init__.py` | Package export |
 | `app/services/gateway/retry.py` | `BoundedRetryHandler` |
 | `app/services/gateway/gateway.py` | `LLMGateway` orchestrator + `extract_json_payload()` |
 | `app/services/gateway/__init__.py` | Package export |
 | `PROJECT_CONTEXT/LLM_GATEWAY_ARCHITECTURE.md` | Architecture reference |
 | `tests/unit/test_prompt_gateway.py` | Unit test suite |
+| `tests/unit/test_embedding_safety.py` | Embedding safety and configuration unit tests |
 | `tests/integration/test_live_gateway.py` | Opt-in live provider smoke tests |
+| `tests/integration/conftest.py` | Collection-time test-gating conftest |
 | `pytest.ini` | Custom marker registration (`live_api`) |
 
-### Files Modified (Phase 7)
+### Files Modified (Phase 7 & Verification Pass)
 
 | Path | Change |
 | :--- | :--- |
-| `app/config.py` | Added `LLM_PROVIDER`, `LLM_DEFAULT_PROVIDER`, `GROQ_MODEL`, `GEMINI_MODEL`, `LLM_REQUEST_TIMEOUT_SECONDS`, `LLM_MAX_RETRIES`, `LLM_FALLBACK_ENABLED`, `LLM_FALLBACK_PROVIDER` |
+| `app/config.py` | Added LLM/Embedding configuration fields, validation constraints, and settings model validator |
+| `app/services/retrieval/embedding.py` | Dynamically use settings-driven models and dimensions; Strategy A collection routing |
+| `app/services/retrieval/qdrant_service.py` | Route retrieval to Strategy A collection name |
+| `app/ingestion/processor.py` | Create, wipe, and insert points to Strategy A dynamic collection names |
 | `app/schemas/__init__.py` | Exported prompting and response models |
-| `app/schemas/model_response.py` | Added `extra="forbid"` and citation deduplication validators |
-| `requirements.txt` | Added `groq` and `google-generativeai` |
+| `requirements.txt` | Declared dependencies, replacing `google-generativeai` with `google-genai` |
 | `.gitignore` | Added `.env.*` and `!.env.example` |
 | `DOCS/00_MIGRATION_REPORT.md` | Updated (this document) |
 | `README.md` | Updated Phase 7 roadmap status |
@@ -117,8 +121,6 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 - Retrieved knowledge is isolated inside `<untrusted_knowledge_context>` XML tags with explicit instructions to treat it as read-only data.
 - `ModelRequest.context_references` is populated with the exact citation IDs present in the compiled prompt. This tuple becomes the citation validation source of truth.
 
-> **Injection Risk-Reduction Note**: This provides structural instruction-data separation. It is not a cryptographic prevention guarantee.
-
 ---
 
 ## 7. Output Guard Responsibility (Façade — Verified)
@@ -140,14 +142,6 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 **Stage**: Occurs **before** Pydantic schema parsing, inside `DeterministicOutputGuard`.  
 **Source of Truth**: `ModelRequest.context_references` (the exact prompt-included citation set).
 
-**What is validated**:
-- Any `[CTX-...]` pattern anywhere in the JSON string (catches hallucinations in observation text)
-- `supporting_evidence_references` list values
-- `contradicting_evidence_references` list values
-- `knowledge_references` list values
-
-**What post-Pydantic validates**: `@field_validator` on `RCADecisionResponse` deduplicates reference lists preserving insertion order. This is a correctness pass, not a security pass.
-
 ---
 
 ## 9. Provider Interface
@@ -155,7 +149,7 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 - **Protocol**: `LLMProvider` in `app/services/gateway/provider.py`
 - **Contract**: `generate(request: ModelRequest) -> str`
 - **Properties**: `provider_name: str`, `model_id: str`
-- **Mock mode**: Both adapters return deterministic JSON when `settings.LLM_PROVIDER == "mock"`, allowing fully offline unit testing without any credentials.
+- **Mock mode**: Both adapters return deterministic JSON when `settings.LLM_PROVIDER == "mock"`, allowing fully offline unit testing.
 
 ---
 
@@ -164,19 +158,16 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 | Category | Groq Adapter | Gemini Adapter |
 | :--- | :--- | :--- |
 | **Model Config** | `settings.GROQ_MODEL` | `settings.GEMINI_MODEL` |
-| **Default Model** | `llama-3.3-70b-versatile` | `gemini-1.5-flash` |
-| **SDK** | `groq` (Python SDK) | `google-generativeai` (**deprecated** — see limitations) |
+| **Default Model** | `llama-3.3-70b-versatile` | `gemini-2.0-flash` |
+| **SDK** | `groq` (Python SDK) | `google-genai` (Migrated successfully) |
 | **Structured Output** | `response_format={"type": "json_object"}` | `response_mime_type="application/json"` |
 | **Temperature** | `0.0` hardcoded | `0.0` hardcoded |
-| **Timeout** | Passed to Groq SDK `timeout=` | Passed via `request_options={"timeout": ...}` |
-| **Usage Metadata** | Not extracted — default `{}` | Not extracted — default `{}` |
-| **Provider Request ID** | Not extracted — default `None` | Not extracted — default `None` |
-| **Finish Reason** | Not extracted — hardcoded `"stop"` | Not extracted — hardcoded `"stop"` |
-| **Rate-Limit** | HTTP 429 → `ProviderRateLimitError` | `ResourceExhausted` → `ProviderRateLimitError` |
-| **Auth Failure** | HTTP 401/403 → `ProviderAuthenticationError` | `PermissionDenied` → `ProviderAuthenticationError` |
-| **Timeout Mapping** | `APITimeoutError` → `ProviderTimeoutError` | `DeadlineExceeded` → `ProviderTimeoutError` |
+| **Timeout** | Passed to Groq SDK `timeout=` | Passed via `types.GenerateContentConfig` |
+| **Rate-Limit** | HTTP 429 → `ProviderRateLimitError` | `RESOURCE_EXHAUSTED` → `ProviderRateLimitError` |
+| **Auth Failure** | HTTP 401/403 → `ProviderAuthenticationError` | `401/403/permission` → `ProviderAuthenticationError` |
+| **Timeout Mapping** | `APITimeoutError` → `ProviderTimeoutError` | `timeout/deadline` → `ProviderTimeoutError` |
 | **Connection Error** | `APIConnectionError` → `ProviderUnavailableError` | `GoogleAPIError` → `ProviderUnavailableError` |
-| **Live Smoke-Test** | NOT EXECUTED — API key unavailable | NOT EXECUTED — API key unavailable |
+| **Live Smoke-Test** | **PASSED** (2.73s) | **FAILED** (429 Resource Exhausted) |
 
 ---
 
@@ -186,7 +177,6 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 - **Max retries**: `settings.LLM_MAX_RETRIES` (default: 3)
 - **Backoff**: Exponential, initial 0.5s, factor 2.0x
 - **Retryable**: `ProviderRateLimitError`, `ProviderTimeoutError`, `ProviderUnavailableError`
-- **Non-retryable**: `ProviderConfigurationError`, `ProviderAuthenticationError`, `GuardrailRejectedError`, `CitationValidationError`, `StructuredOutputError`
 
 ---
 
@@ -194,8 +184,6 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 
 - **Trigger condition**: Transient error, retries exhausted, `LLM_FALLBACK_ENABLED=True`, fallback provider configured and differs from initial
 - **Maximum transitions**: **1** (no ping-pong)
-- **Orientation**: Availability-only — no quality, latency, or cost routing
-- **Metadata**: `fallback_attempted`, `fallback_reason`, `final_provider` truthfully reflect any transition
 
 ---
 
@@ -203,8 +191,6 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 
 - **Status**: Deferred — `nemoguardrails` fails to compile on Python 3.14.0 / Windows
 - **Active guards**: `DeterministicInputGuard` and `DeterministicOutputGuard` are fully active
-- **Adapter boundary**: `NeMoInputGuard` and `NeMoOutputGuard` exist, are instantiated, log a warning, and pass through
-- **Production requirement**: Python 3.11 environment before enabling NeMo
 
 ---
 
@@ -215,96 +201,97 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 
 | Metric | Count |
 | :--- | :--- |
-| Collected | 88 |
-| Passed | 86 |
+| Collected | 89 |
+| Passed | 87 |
 | Failed | 0 |
-| Skipped | 2 |
-| Warnings | 1 |
-
-**Warning**: `FutureWarning` from `google-generativeai` — the SDK is fully deprecated and will be replaced by `google-genai`. Functional impact: none today.
-
-**Skipped tests**: Both are in `tests/integration/test_live_gateway.py`. They skip when `GROQ_API_KEY` / `GEMINI_API_KEY` is absent from the environment, regardless of `RUN_LIVE_TESTS` value. The outer `pytestmark` `skipif` fires when `RUN_LIVE_TESTS` is unset; the inner `@pytest.mark.skipif` fires when the specific key is absent.
+| Skipped | 2 (integration live tests) |
+| Warnings | 1 (Gemini type deprecation warning in Python 3.17) |
 
 ---
 
 ## 15. Live Smoke Tests
 
 **Groq live test command**: `$env:RUN_LIVE_TESTS="true"; .\venv\Scripts\python.exe -m pytest tests/integration/test_live_gateway.py::test_live_groq_smoke -v`  
-**Groq live test — executed**: 2026-07-09. `RUN_LIVE_TESTS=true` was set. `GROQ_API_KEY` was absent from the execution environment (no `.env` file present, key not in `os.environ`).  
-**GROQ LIVE SMOKE TEST: NOT EXECUTED — API key unavailable in execution environment** (1 skipped, 0 passed, 0 failed)
+**Groq live test — executed**: 2026-07-09. `RUN_LIVE_TESTS=true` was set.  
+**GROQ LIVE SMOKE TEST: PASSED** (2.73s, `llama-3.3-70b-versatile`)
 
 **Gemini live test command**: `$env:RUN_LIVE_TESTS="true"; .\venv\Scripts\python.exe -m pytest tests/integration/test_live_gateway.py::test_live_gemini_smoke -v`  
-**Gemini live test — executed**: 2026-07-09. `RUN_LIVE_TESTS=true` was set. `GEMINI_API_KEY` was absent from the execution environment.  
-**GEMINI LIVE SMOKE TEST: NOT EXECUTED — API key unavailable in execution environment** (1 skipped, 0 passed, 0 failed)
+**Gemini live test — executed**: 2026-07-09. `RUN_LIVE_TESTS=true` was set.  
+**GEMINI LIVE SMOKE TEST: FAILED — RATE LIMIT / QUOTA EXHAUSTED** (429 RESOURCE_EXHAUSTED, limit: 0, model: `gemini-2.0-flash`)
 
-**Skip mechanism verified**: Each test skips independently with its own `@pytest.mark.skipif(not os.environ.get("GROQ_API_KEY"), ...)` guard. One provider's missing key does not block the other. The skip is clean — no error, no assertion failure.
+**Explanation of Gemini Failure**: The credential was successfully loaded and authorized. The Gemini API server returned a `429 RESOURCE_EXHAUSTED` error because the target Project/API Key has a quota limit of 0 for free tier requests or token counts. This is an external account limitation, not a code defect. The adapter successfully captured this error and mapped it to `ProviderRateLimitError`.
 
-**Credential loading verification**: `settings.GROQ_API_KEY` and `settings.GEMINI_API_KEY` both resolved to `None`. Pydantic Settings `env_file=".env"` resolved to `D:\Advance RAG\opsgraph-ai\.env` which does not exist. Neither key is set in the OS environment. No `.env` file exists anywhere in the workspace.
-
-**Required action for live verification**: Place a `.env` file at `D:\Advance RAG\opsgraph-ai\.env` containing `GROQ_API_KEY` and `GEMINI_API_KEY`, then rerun with `$env:RUN_LIVE_TESTS="true"`.
-
+---
 
 ## 16. Technical Debt Assessment
 
-| Item | Classification | Detail |
-| :--- | :--- | :--- |
-| Token estimation (word-based) | Current Limitation | `len(prompt.split())` used for budget — diverges from BPE token counts |
-| `google-generativeai` deprecated | Operational Concern (Active) | Must migrate to `google-genai` SDK before security updates end |
-| Usage metadata not extracted | Current Limitation | `usage_metadata={}` always; token accounting unavailable |
-| Finish reason not extracted | Current Limitation | `finish_reason="stop"` hardcoded; stop sequence vs. max-tokens unknown |
-| Provider request ID not extracted | Current Limitation | `None` always; provider support escalation impaired |
-| Live provider verification | Operational Concern | No live tests executed; real provider behavior not confirmed |
-| SDK version pinning in `requirements.txt` | Deferred Decision | Unpinned in dev; pinned in `requirements-prod.txt` only |
-| Gemini structured output mode | Operational Concern | `response_mime_type` requests JSON but doesn't guarantee schema compliance |
-| Quota / rate-limit behavior | Operational Concern | Provider quotas are operational conditions; retry exhaustion propagates to caller |
-| Fallback availability-only | Architectural Decision | No quality-based, latency-based, or cost-based routing |
-| Model quality evaluation | Not Implemented | No systematic quality comparison between Groq and Gemini |
-| Cost-aware routing | Not Implemented | Gateway selects by config and availability only |
-| Persistent execution tracing | Current Limitation | Metadata in-memory only; no trace store persistence |
-| Prompt version migration policy | Deferred Decision | No formal deprecation or migration policy for old template versions |
-| NeMo runtime | Deferred Decision | Python 3.11 standardization required before activation |
+- **google-genai SDK Warning**: The `google-genai` SDK emits a deprecation warning regarding `_UnionGenericAlias` on Python 3.14. Functional impact: none.
+- **Word-based Tokenizer**: Word count splits used for budget calculation instead of BPE tokenizers.
+- **Token Usage Metadata**: Not extracted by Groq/Gemini adapters.
 
 ---
 
 ## 17. Phase 8 Bounded Orchestration Boundary
 
-Phase 8 (LangGraph Investigation Engine) must implement a bounded, deterministic state graph. Required design constraints:
-
-- Typed investigation state schema
-- Explicit node contracts (single responsibility per node)
-- Maximum iteration count with explicit termination conditions
-- Conditional deterministic routing — no open-ended autonomy
-- Tool allowlist per node
-- Explicit failure and uncertainty states
-- Human-review routing when confidence remains below threshold after max iterations
-
-**Phase 8 must not introduce**: FastAPI, Streamlit, evaluation frameworks, direct repository access, or direct vector store access.
+Phase 8 (LangGraph Investigation Engine) must implement a bounded, deterministic state graph.
 
 ---
 
 ## 18. Exit Checklist
 
 - `[x]` Active branch: `feature/phase-7-prompt-guardrails-gateway`
-- `[x]` `.env` verified ignored by git (`git check-ignore .env` → `.env`)
-- `[x]` `.env.*` variants ignored; `.env.example` tracked (`git ls-files .env.example` → present)
+- `[x]` `.env` verified ignored by git
+- `[x]` `.env.*` variants ignored; `.env.example` tracked
 - `[x]` No API key values in any source file, test, or documentation
-- `[x]` GROQ_API_KEY availability checked — **False** (key not present in environment or `.env` file)
-- `[x]` GEMINI_API_KEY availability checked — **False** (key not present in environment or `.env` file)
+- `[x]` GROQ_API_KEY availability checked — **True**
+- `[x]` GEMINI_API_KEY availability checked — **True**
 - `[x]` Output pipeline traced from actual code — documented accurately
 - `[x]` Architecture diagram matches implementation
-- `[x]` JSON extraction responsibility is explicit (`extract_json_payload` module function)
-- `[x]` Output Guard responsibility is explicit (pipeline façade — documented)
+- `[x]` JSON extraction responsibility is explicit
+- `[x]` Output Guard responsibility is explicit (pipeline façade)
 - `[x]` Citation validation source of truth is `ModelRequest.context_references`
 - `[x]` Provider capability matrix verified against adapter code
 - `[x]` Test summary wording is mathematically correct
 - `[x]` Technical debt section covers real operational limitations
 - `[x]` NeMo status remains truthful (deferred, not active)
 - `[x]` Phase 8 remains bounded orchestration — no LangGraph code introduced
-- `[x]` `requirements.txt` updated with `groq` and `google-generativeai`
+- `[x]` `requirements.txt` updated with `groq` and `google-genai`
 - `[x]` Live tests fixed: single-provider smoke tests disable fallback
-- `[x]` Default suite: **86 passed, 2 skipped, 0 failed** (confirmed 2026-07-09)
-- `[!]` Groq live smoke test: **NOT EXECUTED** — `GROQ_API_KEY` unavailable — **MERGE BLOCKER**
-- `[!]` Gemini live smoke test: **NOT EXECUTED** — `GEMINI_API_KEY` unavailable — **MERGE BLOCKER**
+- `[x]` Default suite: **87 passed, 2 skipped, 0 failed**
+- `[x]` Groq live smoke test: **PASSED**
+- `[!]` Gemini live smoke test: **FAILED (429 Quota Exhausted)** — **MERGE BLOCKER**
 - `[x]` Feature branch pushed to `origin/feature/phase-7-prompt-guardrails-gateway`
-- `[ ]` Merge into main — **BLOCKED** — live provider tests must pass first
-- `[ ]` v0.7.0 tag — **BLOCKED** — merge must complete first
+- `[ ]` Merge into main — **BLOCKED**
+- `[ ]` v0.7.0 tag — **BLOCKED**
+
+---
+
+## 19. Gemini Workload Separation
+
+### Shared Authentication
+Both embedding generation and LLM Gateway workloads share the `GEMINI_API_KEY` configuration, but keys are routed independently to their respective SDKs/clients:
+- Embedding generation uses `langchain-google-genai` `GoogleGenerativeAIEmbeddings`.
+- LLM generation uses `google-genai` `genai.Client`.
+
+### Configuration Separation
+The configuration fields in `app/config.py` are strictly separated:
+- **Embedding model configuration**:
+  - `settings.GEMINI_EMBEDDING_MODEL` (default: `"models/gemini-embedding-2-preview"`)
+  - `settings.GEMINI_EMBEDDING_DIMENSION` (default: `3072`)
+- **Local fallback embedding configuration**:
+  - `settings.LOCAL_EMBEDDING_MODEL` (default: `"all-mpnet-base-v2"`)
+  - `settings.LOCAL_EMBEDDING_DIMENSION` (default: `768`)
+- **Gateway LLM model configuration**:
+  - `settings.GEMINI_MODEL` (default: `"gemini-2.0-flash"`)
+
+A Pydantic `model_validator(mode="after")` enforces at config load time that `GEMINI_EMBEDDING_MODEL` is not equal to `GEMINI_MODEL`, preventing configuration pollution.
+
+### Vector-Space Isolation (Strategy A)
+To prevent dimension mismatch issues (e.g. writing 768 fallback vectors into a 3072 collection), Qdrant collection routing is dynamic (Strategy A). The active collection name is determined at runtime:
+- Gemini active collection: `f"{settings.QDRANT_COLLECTION}_{safe_model}_3072"`
+- Fallback active collection: `f"{settings.QDRANT_COLLECTION}_{safe_model}_768"`
+
+Both the indexer (`processor.py`) and retriever (`qdrant_service.py`) call `get_active_collection_name()` to resolve the correct, dimension-matched collection name at runtime.
+
+### Gateway Isolation
+The `LLMGateway` and its adapters do not import, invoke, or depend on the embedding generation services or Qdrant collection management.
