@@ -224,7 +224,7 @@ Provider quotas and free-tier availability are operational conditions, not archi
 - Fallback is availability-oriented: if Groq is unavailable, Gemini is tried. There is no quality-based routing, cost optimization, or latency-based routing.
 
 ### Model Quality Evaluation — *Not Implemented*
-No systematic quality comparison between Groq (Llama 3.3) and Gemini (Gemini 2.0 Flash) exists. Provider quality routing is not implemented.
+No systematic quality comparison between Groq (Llama 3.3) and Gemini (Gemini 2.5 Flash) exists. Provider quality routing is not implemented.
 
 ### Cost-Aware Routing — *Not Implemented*
 Request-cost optimization is not implemented. The gateway selects providers based on configuration and availability only.
