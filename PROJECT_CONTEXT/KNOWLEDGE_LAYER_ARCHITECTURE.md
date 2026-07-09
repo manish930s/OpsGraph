@@ -126,7 +126,21 @@ If the resolved collection does not exist in Qdrant:
 #### Scenario D: Embedding Provider Fallback
 When the Gemini embedding probe fails and local MPNet becomes active:
 1. **Collection Routing**: The active collection name is dynamically updated to the 768-dimension suffix: `f"{settings.QDRANT_COLLECTION}_all-mpnet-base-v2_768"`.
-2. **Collection Readiness**: Since ingestion only populates the active collection (Gemini-backed), the fallback collection will be empty unless a separate local fallback ingestion cycle was explicitly run. If empty, the system falls back to Scenario B (lexical-only).
+2. **Collection Readiness**: Since ingestion only populates the active collection (Gemini-backed), the fallback collection status is dependent on the following two distinct runtime states:
+   - **State 1: Fallback collection exists but contains zero points**:
+     - Dense search queries the 768-dimension collection and returns an empty candidate list `[]` without error.
+     - BM25 remains fully available and unaffected.
+     - RRF successfully accepts lexical-only candidates.
+     - Reranking operates on lexical-only candidates.
+     - `KnowledgeBundle` successfully returns the lexical results.
+     - This behavior follows **Scenario B**.
+   - **State 2: Fallback collection does not exist**:
+     - Qdrant returns a missing-collection error (404 status code).
+     - The Qdrant adapter catches and re-raises this exception.
+     - The current retrieval orchestration does not isolate this dense-channel exception; it propagates directly to the caller.
+     - BM25 results are not fused or returned.
+     - The retrieval request fails.
+     - This behavior follows **Scenario C**.
 3. **Lexical Channel Availability**: The BM25 lexical search channel is fully available and unaffected by the embedding provider status.
 4. **Degraded-Mode Metadata**: The retriever metadata reports `embedding_mode = "sentence-transformer-fallback"`. If other fallbacks occur (e.g. vector store in memory or Jaccard reranking), `degraded_mode` is set to `True` and the detailed reason is appended to `fallback_reasons`.
 
