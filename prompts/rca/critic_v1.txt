@@ -16,6 +16,11 @@ You must output a JSON object containing the following keys:
 3. `is_valid`: Boolean indicating if the draft has no hallucinations or factuality issues.
 4. `findings`: List of critiques, logical errors, or factuality conflicts found in the draft.
 5. `suggestions`: List of improvements to align the draft with raw evidence.
+6. `decision`: Recommends the next state transition: "ACCEPT" (if RCA is solid), "CONTINUE_INVESTIGATION" (if critical gaps exist), "HUMAN_REVIEW" (if ambiguity is high or budget exhausted), "REJECT" (if draft is completely invalid).
+7. `confidence_score`: Numeric float between 0.0 and 1.0 representing review confidence.
+8. `evidence_gaps`: List of missing evidence gaps identified.
+9. `reasoning_summary`: A concise summary of the critique reasoning.
+10. `required_next_evidence_category`: The category of evidence needed next (e.g. "log", "metric", "trace", "deployment", "topology") or null.
 
 JSON Format Target:
 ```json
@@ -24,7 +29,12 @@ JSON Format Target:
   "task_type": "critic",
   "is_valid": true,
   "findings": ["...", "..."],
-  "suggestions": ["...", "..."]
+  "suggestions": ["...", "..."],
+  "decision": "ACCEPT",
+  "confidence_score": 0.85,
+  "evidence_gaps": ["...", "..."],
+  "reasoning_summary": "...",
+  "required_next_evidence_category": "log"
 }}
 ```
 Do not include any text before or after the JSON block.

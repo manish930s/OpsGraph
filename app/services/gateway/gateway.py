@@ -195,6 +195,10 @@ class LLMGateway:
             elif request.task_type == "critic":
                 parsed_response = CriticDecisionResponse(**parsed_data)
                 response_id = parsed_response.response_id
+            elif request.task_type == "tool_selection":
+                from app.schemas.orchestration import ToolSelectionDecision
+                parsed_response = ToolSelectionDecision(**parsed_data)
+                response_id = parsed_response.response_id
             else:
                 parsed_response = parsed_data
                 response_id = parsed_data.get("response_id", "UNKNOWN")

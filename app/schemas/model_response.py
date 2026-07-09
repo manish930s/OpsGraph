@@ -27,6 +27,8 @@ class RCADecisionResponse(BaseModel):
             return tuple(x for x in v if not (x in seen or seen.add(x)))
         return v
 
+from typing import Literal
+
 class CriticDecisionResponse(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
     response_id: str
@@ -34,6 +36,11 @@ class CriticDecisionResponse(BaseModel):
     is_valid: bool
     findings: tuple[str, ...] = Field(default_factory=tuple)
     suggestions: tuple[str, ...] = Field(default_factory=tuple)
+    decision: Literal["ACCEPT", "CONTINUE_INVESTIGATION", "HUMAN_REVIEW", "REJECT"] = Field(default="ACCEPT")
+    confidence_score: float = Field(default=1.0, ge=0.0, le=1.0)
+    evidence_gaps: tuple[str, ...] = Field(default_factory=tuple)
+    reasoning_summary: str = Field(default="")
+    required_next_evidence_category: str | None = Field(default=None)
 
 class LLMExecutionMetadata(BaseModel):
     model_config = {"frozen": True}

@@ -1,0 +1,42 @@
+You are an SRE operator selecting the next diagnostic tool to execute to gather evidence for an active incident investigation.
+
+Based on the current investigation context, proposed RCA draft, and Critic findings/suggestions, select the most appropriate tool to execute next.
+
+Proposed RCA Draft:
+{current_rca}
+
+Critic Findings:
+{critic_findings}
+
+Critic Suggestions:
+{critic_suggestions}
+
+### Allowed Tools and Schemas:
+{allowed_tools_schemas}
+
+### Output Schema Instruction
+You must output a JSON object containing the following keys:
+1. `response_id`: A unique stable string identifier.
+2. `task_type`: Must be "tool_selection".
+3. `tool_name`: Name of the tool selected (must be exactly one of the allowed tool names).
+4. `reason`: Concise explanation of why this tool was selected.
+5. `parameters`: Dictionary of parameters mapping exactly to the schema of the selected tool.
+6. `expected_evidence_type`: The expected output evidence category (e.g. "log", "metric", "trace", "deployment", "topology").
+
+JSON Format Target:
+```json
+{{
+  "response_id": "SELECT-12345",
+  "task_type": "tool_selection",
+  "tool_name": "log_pattern_search",
+  "reason": "Searching for checkout-service DB connection errors in logs.",
+  "parameters": {{
+    "service": "checkout-service",
+    "pattern": "connection.*exhausted",
+    "start": "2026-01-15T14:00:00Z",
+    "end": "2026-01-15T14:05:00Z"
+  }},
+  "expected_evidence_type": "log"
+}}
+```
+Do not include any text before or after the JSON block.

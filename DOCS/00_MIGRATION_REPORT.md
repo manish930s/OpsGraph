@@ -202,11 +202,11 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 
 | Metric | Count (Offline Mode) | Count (Live-Enabled Mode) |
 | :--- | :--- | :--- |
-| Collected | 98 | 98 |
-| Passed | 96 | 98 |
+| Collected | 107 | 107 |
+| Passed | 105 | 107 |
 | Failed | 0 | 0 |
 | Skipped | 2 (integration live tests) | 0 |
-| Warnings | 2 | 2 |
+| Warnings | 3 | 3 |
 
 ---
 
@@ -255,10 +255,10 @@ Phase 8 (LangGraph Investigation Engine) must implement a bounded, deterministic
 - `[x]` Test summary wording is mathematically correct
 - `[x]` Technical debt section covers real operational limitations
 - `[x]` NeMo status remains truthful (deferred, not active)
-- `[x]` Phase 8 remains bounded orchestration — no LangGraph code introduced
-- `[x]` `requirements.txt` updated with `groq` and `google-genai`
+- `[x]` Phase 8 bounded orchestration — LangGraph StateGraph, nodes, and conditional edges implemented
+- `[x]` requirements.txt updated with `groq` and `google-genai`
 - `[x]` Live tests fixed: single-provider smoke tests disable fallback
-- `[x]` Default suite: **96 passed, 2 skipped, 0 failed (offline) / 98 passed (live)**
+- `[x]` Default suite: **105 passed, 2 skipped, 0 failed (offline) / 107 passed (live)**
 - `[x]` Groq live smoke test: **PASSED**
 - `[x]` Gemini live smoke test: **PASSED** (using `gemini-2.5-flash`)
 - `[x]` Feature branch pushed to `origin/feature/phase-7-prompt-guardrails-gateway`
@@ -302,3 +302,14 @@ The `LLMGateway` and its adapters do not import, invoke, or depend on the embedd
 
 ### Release Gate Policy
 The project adheres to **Policy A (Strict Dual-Provider Release Gate)**: successful live execution from both Groq and Gemini providers is mandatory. Since the Gemini live smoke test has now successfully passed with the `gemini-2.5-flash` model, the release gate is fully met, and the release status is **UNBLOCKED / PASSED**. Merge into `main` and `v0.7.0` tagging are authorized.
+
+---
+
+## 20. Phase 8 Bounded LangGraph Orchestration Details
+
+- **Implementation**: Created a stateful SRE workflow engine using LangGraph (`create_investigation_graph`).
+- **State Representation**: Strongly typed `InvestigationState` dictionary carrying incident records, execution metrics, current hypotheses, and terminal state indicators.
+- **Enforced Boundaries**: Implemented configurations in `app/config.py` defining hard budget limits (`INVESTIGATION_MAX_ITERATIONS` = 3, `INVESTIGATION_MAX_TOOL_CALLS` = 6, `INVESTIGATION_MAX_CONTEXT_REBUILDS` = 3).
+- **Tool Allowlist & Strict Typing**: Restricts executions to registry allowed tools, validating parameter schemas strictly using `args_model` Pydantic models.
+- **Escalation**: Gracefully routes to human review terminal state (`HumanReviewTerminalState`) or graph failure state (`FailureTerminalState`) when budgets are exhausted or verification checks fail.
+- **Unit Verification**: 9 new boundedness and execution path tests passing successfully (`tests/unit/test_orchestration.py`).

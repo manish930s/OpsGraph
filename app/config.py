@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     CONFIDENCE_STRONG_THRESHOLD: float = Field(default=0.80)
     CONFIDENCE_MODERATE_THRESHOLD: float = Field(default=0.60)
 
+    # --- PHASE 8 ORCHESTRATION LIMITS ---
+    INVESTIGATION_MAX_ITERATIONS: int = Field(default=3)
+    INVESTIGATION_CONFIDENCE_THRESHOLD: float = Field(default=0.80)
+    INVESTIGATION_MAX_TOOL_CALLS: int = Field(default=6)
+    INVESTIGATION_MAX_EVIDENCE_ITEMS: int = Field(default=100)
+    INVESTIGATION_MAX_CONTEXT_REBUILDS: int = Field(default=3)
+
     @model_validator(mode="after")
     def validate_embedding_and_llm_configs(self) -> "Settings":
         if self.GEMINI_EMBEDDING_MODEL == self.GEMINI_MODEL:
