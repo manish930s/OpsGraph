@@ -6,6 +6,11 @@ from app.services.orchestration.routing import route_after_evaluation
 
 logger = logging.getLogger("opsgraph.orchestration.graph")
 
+def route_after_initialize(state: InvestigationState) -> str:
+    if state.get("failure") is not None:
+        return "failure"
+    return "build_context"
+
 def route_after_context_build(state: InvestigationState) -> str:
     if state.get("failure") is not None:
         return "failure"
@@ -53,7 +58,14 @@ def create_investigation_graph(nodes: WorkflowNodes) -> StateGraph:
 
     # Establish flow topology
     workflow.add_edge(START, "initialize")
-    workflow.add_edge("initialize", "build_context")
+    workflow.add_conditional_edges(
+        "initialize",
+        route_after_initialize,
+        {
+            "failure": "failure",
+            "build_context": "build_context"
+        }
+    )
 
     workflow.add_conditional_edges(
         "build_context",

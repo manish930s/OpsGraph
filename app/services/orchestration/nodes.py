@@ -39,33 +39,43 @@ class WorkflowNodes:
 
     def initialize_investigation(self, state: InvestigationState) -> dict[str, Any]:
         logger.info(f"Initializing investigation for incident: {state.get('investigation_id')}")
-        incident: IncidentRecord = state["incident"]
-        
-        # Initialize evidence with base incident record normalized into evidence
-        normalizer = EvidenceNormalizer(incident.incident_id, incident.scenario_id)
-        base_ev = normalizer.normalize_incident(
-            incident_id=incident.incident_id,
-            title=incident.title,
-            description=incident.description,
-            reported_services=list(incident.reported_services),
-            reported_symptoms=list(incident.reported_symptoms),
-            reported_at=incident.reported_at,
-            investigation_window=incident.investigation_window.model_dump()
-        )
-        
-        return {
-            "iteration_count": 0,
-            "tool_call_count": 0,
-            "context_rebuild_count": 0,
-            "evidence_list": [base_ev],
-            "investigation_context": None,
-            "current_rca": None,
-            "critic_decision": None,
-            "tool_selection": None,
-            "termination_reason": None,
-            "human_review": None,
-            "failure": None
-        }
+        try:
+            incident: IncidentRecord = state["incident"]
+            
+            # Initialize evidence with base incident record normalized into evidence
+            normalizer = EvidenceNormalizer(incident.incident_id, incident.scenario_id)
+            base_ev = normalizer.normalize_incident(
+                incident_id=incident.incident_id,
+                title=incident.title,
+                description=incident.description,
+                reported_services=list(incident.reported_services),
+                reported_symptoms=list(incident.reported_symptoms),
+                reported_at=incident.reported_at,
+                investigation_window=incident.investigation_window.model_dump()
+            )
+            
+            return {
+                "iteration_count": 0,
+                "tool_call_count": 0,
+                "context_rebuild_count": 0,
+                "evidence_list": [base_ev],
+                "investigation_context": None,
+                "current_rca": None,
+                "critic_decision": None,
+                "tool_selection": None,
+                "termination_reason": None,
+                "human_review": None,
+                "failure": None
+            }
+        except Exception as e:
+            logger.error(f"Initialization failure: {str(e)}")
+            return {
+                "failure": FailureTerminalState(
+                    incident_id=state.get("incident").incident_id if state.get("incident") else "UNKNOWN",
+                    failure_type="INITIALIZATION_FAILURE",
+                    error_message=f"Initialization failure: {str(e)}"
+                )
+            }
 
     def build_context(self, state: InvestigationState) -> dict[str, Any]:
         logger.info("Building initial investigation context.")
@@ -362,10 +372,15 @@ class WorkflowNodes:
 
         review = HumanReviewTerminalState(
             incident_id=incident.incident_id,
+            investigation_id=state.get("investigation_id"),
             current_rca=state.get("current_rca"),
+            critic_decision=critic,
             gaps=tuple(gaps),
             reason=escalation_reason,
-            recommended_actions=critic.suggestions if critic else ()
+            recommended_actions=critic.suggestions if critic else (),
+            iteration_count=state.get("iteration_count", 0),
+            tool_call_count=state.get("tool_call_count", 0),
+            context_rebuild_count=state.get("context_rebuild_count", 0)
         )
         return {
             "termination_reason": "Escalated to human review",

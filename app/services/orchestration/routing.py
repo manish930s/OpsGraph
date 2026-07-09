@@ -33,8 +33,19 @@ def route_after_evaluation(state: InvestigationState) -> str:
         f"tools={tools}/{max_tools}, rebuilds={rebuilds}/{max_rebuilds}"
     )
 
+    # Enforce confidence threshold and consistency on ACCEPT
     if decision == "ACCEPT":
-        return "finalize_rca"
+        if not critic.is_valid:
+            logger.warning("Critic accepted RCA but is_valid is False. Demoting to CONTINUE_INVESTIGATION.")
+            decision = "CONTINUE_INVESTIGATION"
+        elif critic.confidence_score < settings.INVESTIGATION_CONFIDENCE_THRESHOLD:
+            logger.warning(
+                f"Critic accepted RCA but confidence {critic.confidence_score} is below threshold "
+                f"{settings.INVESTIGATION_CONFIDENCE_THRESHOLD}. Demoting to CONTINUE_INVESTIGATION."
+            )
+            decision = "CONTINUE_INVESTIGATION"
+        else:
+            return "finalize_rca"
     
     if decision == "HUMAN_REVIEW":
         return "human_review"

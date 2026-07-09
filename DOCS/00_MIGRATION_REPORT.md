@@ -258,7 +258,7 @@ Phase 8 (LangGraph Investigation Engine) must implement a bounded, deterministic
 - `[x]` Phase 8 bounded orchestration — LangGraph StateGraph, nodes, and conditional edges implemented
 - `[x]` requirements.txt updated with `groq` and `google-genai`
 - `[x]` Live tests fixed: single-provider smoke tests disable fallback
-- `[x]` Default suite: **105 passed, 2 skipped, 0 failed (offline) / 107 passed (live)**
+- `[x]` Default suite: **110 passed, 2 skipped, 0 failed (offline) / 112 passed (live)**
 - `[x]` Groq live smoke test: **PASSED**
 - `[x]` Gemini live smoke test: **PASSED** (using `gemini-2.5-flash`)
 - `[x]` Feature branch pushed to `origin/feature/phase-7-prompt-guardrails-gateway`

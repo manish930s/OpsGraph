@@ -542,3 +542,256 @@ def test_critic_human_review_routing(mock_gateway, mock_retriever, tool_registry
 
     assert result["termination_reason"] == "Escalated to human review"
     assert "Critic requested human review" in result["human_review"].reason
+
+def test_critic_accept_low_confidence_demotion(mock_gateway, mock_retriever, tool_registry, topology, incident):
+    rca_res = RCADecisionResponse(
+        response_id="R-1",
+        task_type="rca",
+        summary="Draft",
+        observations=(),
+        hypotheses=(),
+        recommended_next_steps=()
+    )
+    # ACCEPT but low confidence (0.5 < 0.8)
+    critic_res = CriticDecisionResponse(
+        response_id="C-1",
+        task_type="critic",
+        is_valid=True,
+        findings=(),
+        suggestions=(),
+        decision="ACCEPT",
+        confidence_score=0.5
+    )
+    tool_selection_res = ToolSelectionDecision(
+        response_id="S-1",
+        task_type="tool_selection",
+        tool_name="log_pattern_search",
+        reason="Query logs",
+        parameters={},
+        expected_evidence_type="log"
+    )
+
+    mock_gateway.generate.side_effect = lambda request: ValidatedModelResponse(
+        response_id="1",
+        task_type=request.task_type,
+        raw_content="{}",
+        parsed_response=(
+            rca_res if request.task_type == "rca" else (
+                critic_res if request.task_type == "critic" else tool_selection_res
+            )
+        ),
+        execution_metadata=make_metadata(request.task_type)
+    )
+
+    original_max_iters = settings.INVESTIGATION_MAX_ITERATIONS
+    settings.INVESTIGATION_MAX_ITERATIONS = 2
+
+    try:
+        nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+        graph = create_investigation_graph(nodes).compile()
+
+        state = {"incident": incident, "investigation_id": "INV-009"}
+        result = graph.invoke(state)
+
+        # Should be demoted to CONTINUE_INVESTIGATION and then hit max iteration limit
+        assert result["termination_reason"] == "Escalated to human review"
+        assert "Max investigation iteration limit reached." in result["human_review"].reason
+    finally:
+        settings.INVESTIGATION_MAX_ITERATIONS = original_max_iters
+
+def test_critic_accept_invalid_demotion(mock_gateway, mock_retriever, tool_registry, topology, incident):
+    rca_res = RCADecisionResponse(
+        response_id="R-1",
+        task_type="rca",
+        summary="Draft",
+        observations=(),
+        hypotheses=(),
+        recommended_next_steps=()
+    )
+    # ACCEPT but invalid (is_valid=False)
+    critic_res = CriticDecisionResponse(
+        response_id="C-1",
+        task_type="critic",
+        is_valid=False,
+        findings=("hallucinated",),
+        suggestions=(),
+        decision="ACCEPT",
+        confidence_score=0.9
+    )
+    tool_selection_res = ToolSelectionDecision(
+        response_id="S-1",
+        task_type="tool_selection",
+        tool_name="log_pattern_search",
+        reason="Query logs",
+        parameters={},
+        expected_evidence_type="log"
+    )
+
+    mock_gateway.generate.side_effect = lambda request: ValidatedModelResponse(
+        response_id="1",
+        task_type=request.task_type,
+        raw_content="{}",
+        parsed_response=(
+            rca_res if request.task_type == "rca" else (
+                critic_res if request.task_type == "critic" else tool_selection_res
+            )
+        ),
+        execution_metadata=make_metadata(request.task_type)
+    )
+
+    original_max_iters = settings.INVESTIGATION_MAX_ITERATIONS
+    settings.INVESTIGATION_MAX_ITERATIONS = 2
+
+    try:
+        nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+        graph = create_investigation_graph(nodes).compile()
+
+        state = {"incident": incident, "investigation_id": "INV-010"}
+        result = graph.invoke(state)
+
+        # Should be demoted and hit max iterations
+        assert result["termination_reason"] == "Escalated to human review"
+        assert "Max investigation iteration limit reached." in result["human_review"].reason
+    finally:
+        settings.INVESTIGATION_MAX_ITERATIONS = original_max_iters
+
+def test_tool_execution_exception_failure(mock_gateway, mock_retriever, tool_registry, topology, incident):
+    rca_res = RCADecisionResponse(
+        response_id="R-1",
+        task_type="rca",
+        summary="Draft",
+        observations=(),
+        hypotheses=(),
+        recommended_next_steps=()
+    )
+    critic_res = CriticDecisionResponse(
+        response_id="C-1",
+        task_type="critic",
+        is_valid=False,
+        decision="CONTINUE_INVESTIGATION",
+        confidence_score=0.4,
+        evidence_gaps=("log",)
+    )
+    tool_selection_res = ToolSelectionDecision(
+        response_id="S-1",
+        task_type="tool_selection",
+        tool_name="log_pattern_search",
+        reason="Query logs",
+        parameters={},
+        expected_evidence_type="log"
+    )
+
+    mock_gateway.generate.side_effect = lambda request: ValidatedModelResponse(
+        response_id="1",
+        task_type=request.task_type,
+        raw_content="{}",
+        parsed_response=(rca_res if request.task_type == "rca" else (critic_res if request.task_type == "critic" else tool_selection_res)),
+        execution_metadata=make_metadata(request.task_type)
+    )
+
+    # Force tool.run to raise exception
+    tool = tool_registry.get_tool("log_pattern_search")
+    original_run = tool.run
+    tool.run = MagicMock(side_effect=RuntimeError("Simulated tool crash"))
+
+    try:
+        nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+        graph = create_investigation_graph(nodes).compile()
+
+        state = {"incident": incident, "investigation_id": "INV-011"}
+        result = graph.invoke(state)
+
+        assert result["termination_reason"] == "Investigation failure"
+        assert result["failure"].failure_type == "TOOL_EXECUTION_FAILURE"
+        assert "Simulated tool crash" in result["failure"].error_message
+    finally:
+        tool.run = original_run
+
+def test_initialization_exception_failure(mock_gateway, mock_retriever, tool_registry, topology):
+    nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+    graph = create_investigation_graph(nodes).compile()
+
+    # Pass state with missing "incident" to force initialization failure
+    state = {"investigation_id": "INV-012"}
+    result = graph.invoke(state)
+
+    assert result["termination_reason"] == "Investigation failure"
+    assert result["failure"].failure_type == "INITIALIZATION_FAILURE"
+
+def test_evidence_cap_enforcement(mock_gateway, mock_retriever, tool_registry, topology, incident):
+    rca_res = RCADecisionResponse(
+        response_id="R-1",
+        task_type="rca",
+        summary="Draft",
+        observations=(),
+        hypotheses=(),
+        recommended_next_steps=()
+    )
+    critic_res_continue = CriticDecisionResponse(
+        response_id="C-1",
+        task_type="critic",
+        is_valid=False,
+        findings=(),
+        suggestions=(),
+        decision="CONTINUE_INVESTIGATION",
+        confidence_score=0.4,
+        evidence_gaps=("log",)
+    )
+    tool_selection_res = ToolSelectionDecision(
+        response_id="S-1",
+        task_type="tool_selection",
+        tool_name="log_pattern_search",
+        reason="Query logs",
+        parameters={},
+        expected_evidence_type="log"
+    )
+    critic_res_accept = CriticDecisionResponse(
+        response_id="C-2",
+        task_type="critic",
+        is_valid=True,
+        findings=(),
+        suggestions=(),
+        decision="ACCEPT",
+        confidence_score=0.9
+    )
+
+    critic_call_count = 0
+    mock_gateway.generate.side_effect = lambda request: ValidatedModelResponse(
+        response_id="1",
+        task_type=request.task_type,
+        raw_content="{}",
+        parsed_response=(
+            rca_res if request.task_type == "rca" else (
+                critic_res_continue if request.task_type == "critic" and critic_call_count == 0 else (
+                    critic_res_accept if request.task_type == "critic" else tool_selection_res
+                )
+            )
+        ),
+        execution_metadata=make_metadata(request.task_type)
+    )
+
+    original_cap = settings.INVESTIGATION_MAX_EVIDENCE_ITEMS
+    # Set cap to 2 (1 base incident + at most 1 more from tool)
+    settings.INVESTIGATION_MAX_EVIDENCE_ITEMS = 2
+
+    try:
+        nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+        
+        # We hook into nodes.evaluate_hypothesis to increment critic_call_count
+        original_eval = nodes.evaluate_hypothesis
+        def mock_eval(state):
+            nonlocal critic_call_count
+            res = original_eval(state)
+            critic_call_count += 1
+            return res
+        nodes.evaluate_hypothesis = mock_eval
+
+        graph = create_investigation_graph(nodes).compile()
+
+        state = {"incident": incident, "investigation_id": "INV-013"}
+        result = graph.invoke(state)
+
+        assert result["termination_reason"] == "RCA accepted by critic"
+        assert len(result["evidence_list"]) == 2  # capped at 2, even if tool returned more
+    finally:
+        settings.INVESTIGATION_MAX_EVIDENCE_ITEMS = original_cap
