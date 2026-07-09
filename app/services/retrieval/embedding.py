@@ -4,11 +4,22 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from app.config import settings
 
 BATCH_SIZE = 50
-_GEMINI_DIM = 3072
-_FALLBACK_DIM = 768  # all-mpnet-base-v2
+_GEMINI_DIM = settings.GEMINI_EMBEDDING_DIMENSION
+_FALLBACK_DIM = settings.LOCAL_EMBEDDING_DIMENSION
 
 _active_model = None
 _model_type: str | None = None  # "gemini" or "fallback"
+
+
+def get_active_collection_name() -> str:
+    """Return the collection name matching the active embedding model and dimension."""
+    _init()
+    if _model_type == "gemini":
+        safe_model = settings.GEMINI_EMBEDDING_MODEL.replace("/", "_")
+        return f"{settings.QDRANT_COLLECTION}_{safe_model}_{_GEMINI_DIM}"
+    else:
+        safe_model = settings.LOCAL_EMBEDDING_MODEL.replace("/", "_")
+        return f"{settings.QDRANT_COLLECTION}_{safe_model}_{_FALLBACK_DIM}"
 
 
 # ── Model initialisation ───────────────────────────────────────────────────────
@@ -17,11 +28,11 @@ def _probe_gemini():
     """Try one embed call to verify Gemini is reachable. Returns model or None."""
     try:
         model = GoogleGenerativeAIEmbeddings(
-            model="models/gemini-embedding-2-preview",
+            model=settings.GEMINI_EMBEDDING_MODEL,
             google_api_key=settings.GEMINI_API_KEY,
         )
         model.embed_query("probe")
-        logfire.info("Gemini embeddings ready (gemini-embedding-2-preview, 3072-dim).")
+        logfire.info(f"Gemini embeddings ready ({settings.GEMINI_EMBEDDING_MODEL}, {_GEMINI_DIM}-dim).")
         return model
     except Exception as e:
         logfire.warning(f"Gemini probe failed: {e}. Will use sentence-transformers fallback.")
@@ -30,8 +41,8 @@ def _probe_gemini():
 
 def _load_fallback():
     from sentence_transformers import SentenceTransformer
-    logfire.info("Loading sentence-transformers fallback (all-mpnet-base-v2, 768-dim).")
-    return SentenceTransformer("all-mpnet-base-v2")
+    logfire.info(f"Loading sentence-transformers fallback ({settings.LOCAL_EMBEDDING_MODEL}, {_FALLBACK_DIM}-dim).")
+    return SentenceTransformer(settings.LOCAL_EMBEDDING_MODEL)
 
 
 def _init():

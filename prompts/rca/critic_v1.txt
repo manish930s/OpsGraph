@@ -1,0 +1,30 @@
+Review the proposed Root-Cause Analysis (RCA) draft for potential logical flaws, citation hallucinations, or unsubstantiated assumptions.
+
+RCA Proposed Draft to Review:
+{draft_rca}
+
+### Evaluation Criteria
+1. **Citation Alignment**: Check every citation key (e.g. `[CTX-...]`). Does it map exactly to the provided context? Report any hallucinated citation IDs.
+2. **Factuality Check**: Identify any claims presented as observations that are not directly supported by the telemetry.
+3. **Hypothesis Evaluation**: Are the proposed hypotheses logically sound based on the observations? Do they contradict any other telemetry?
+4. **Distinction**: Ensure findings clearly separate observed facts from diagnostic assumptions.
+
+### Output Schema Instruction
+You must output a JSON object containing the following keys:
+1. `response_id`: A unique stable string identifier.
+2. `task_type`: Must be "critic".
+3. `is_valid`: Boolean indicating if the draft has no hallucinations or factuality issues.
+4. `findings`: List of critiques, logical errors, or factuality conflicts found in the draft.
+5. `suggestions`: List of improvements to align the draft with raw evidence.
+
+JSON Format Target:
+```json
+{{
+  "response_id": "CRITIC-12345",
+  "task_type": "critic",
+  "is_valid": true,
+  "findings": ["...", "..."],
+  "suggestions": ["...", "..."]
+}}
+```
+Do not include any text before or after the JSON block.

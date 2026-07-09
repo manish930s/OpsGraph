@@ -1,5 +1,5 @@
 from app.schemas.common import TimeWindow
-from app.schemas.incident import IncidentCreate, IncidentRecord, IncidentSummary, InvestigationContext
+from app.schemas.incident import IncidentCreate, IncidentRecord, IncidentSummary, IncidentContext
 from app.schemas.telemetry import (
     LogRecord,
     MetricPoint,
@@ -9,16 +9,41 @@ from app.schemas.telemetry import (
     TopologyEdge,
     ServiceTopology,
 )
-from app.schemas.evidence import Evidence, EvidenceProvenance, EvidenceRetrievalMetadata
+from app.schemas.evidence import (
+    Evidence,
+    EvidenceProvenance,
+    EvidenceRetrievalMetadata,
+    ConfidenceComponents,
+    ConfidenceSummary,
+    EvidenceBundle,
+)
 from app.schemas.planning import PlanStep, InvestigationPlan, ToolFailure
 from app.schemas.rca import Hypothesis, Confidence, RecommendedAction, RCAResponse, GroundTruthLabels, GoldenCase
+from app.schemas.knowledge import (
+    KnowledgeDocument,
+    KnowledgeChunk,
+    KnowledgeBundle,
+    RetrievalChannelProvenance,
+    RetrievalExecutionMetadata,
+)
+from app.schemas.context import (
+    ContextItem,
+    CitationInfo,
+    ProvenanceInfo,
+    ContextBudgetSummary,
+    ContextCoverageSummary,
+    ContextGapSummary,
+    ContextExecutionMetadata,
+    ContextSection,
+    InvestigationContext,
+)
 
 __all__ = [
     "TimeWindow",
     "IncidentCreate",
     "IncidentRecord",
     "IncidentSummary",
-    "InvestigationContext",
+    "IncidentContext",
     "LogRecord",
     "MetricPoint",
     "TraceSpan",
@@ -29,6 +54,9 @@ __all__ = [
     "Evidence",
     "EvidenceProvenance",
     "EvidenceRetrievalMetadata",
+    "ConfidenceSummary",
+    "ConfidenceComponents",
+    "EvidenceBundle",
     "PlanStep",
     "InvestigationPlan",
     "ToolFailure",
@@ -38,5 +66,29 @@ __all__ = [
     "RCAResponse",
     "GroundTruthLabels",
     "GoldenCase",
+    "KnowledgeDocument",
+    "KnowledgeChunk",
+    "KnowledgeBundle",
+    "RetrievalChannelProvenance",
+    "RetrievalExecutionMetadata",
+    "ContextItem",
+    "CitationInfo",
+    "ProvenanceInfo",
+    "ContextBudgetSummary",
+    "ContextCoverageSummary",
+    "ContextGapSummary",
+    "ContextExecutionMetadata",
+    "ContextSection",
+    "InvestigationContext",
+    # Prompting & Model Response
+    "Message",
+    "ModelRequest",
+    "RCADecisionResponse",
+    "CriticDecisionResponse",
+    "LLMExecutionMetadata",
+    "ValidatedModelResponse",
 ]
+
+from app.schemas.prompting import Message, ModelRequest
+from app.schemas.model_response import RCADecisionResponse, CriticDecisionResponse, LLMExecutionMetadata, ValidatedModelResponse
 

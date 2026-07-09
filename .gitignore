@@ -26,6 +26,8 @@ wheels/
 
 # Environment variables
 .env
+.env.*
+!.env.example
 
 # Local Vector Store
 index.faiss

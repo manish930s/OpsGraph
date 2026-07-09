@@ -1,0 +1,43 @@
+Conduct a thorough Root-Cause Analysis (RCA) for the following incident:
+
+Incident ID: {incident_id}
+Scenario ID: {scenario_id}
+
+### Telemetry Context & Observed Evidence
+{context_evidence_content}
+
+### Operational Knowledge (Supporting Information)
+{context_knowledge_content}
+
+### Gaps and Warnings
+{context_gaps_content}
+
+### Output Schema Instruction
+You must output a JSON object containing the following keys:
+1. `response_id`: A unique stable string identifier.
+2. `task_type`: Must be "rca".
+3. `summary`: Executive summary of the incident and current state.
+4. `observations`: List of factual observations, each citing its context item ID (e.g. `[CTX-...]`).
+5. `hypotheses`: List of potential root causes, each linking to the observations and citing context item IDs where appropriate.
+6. `supporting_evidence_references`: List of citation IDs (`CTX-...`) supporting your findings.
+7. `contradicting_evidence_references`: List of citation IDs (`CTX-...`) that contradict or complicate the hypotheses.
+8. `knowledge_references`: List of citation IDs (`CTX-...`) of the runbooks/SOPs referred to.
+9. `uncertainty_statements`: List of gaps and things that cannot be determined with current evidence.
+10. `recommended_next_steps`: Actionable diagnostic commands, tool calls, or checks to execute next.
+
+JSON Format Target:
+```json
+{{
+  "response_id": "RCA-12345",
+  "task_type": "rca",
+  "summary": "...",
+  "observations": ["...", "..."],
+  "hypotheses": ["...", "..."],
+  "supporting_evidence_references": ["CTX-..."],
+  "contradicting_evidence_references": ["CTX-..."],
+  "knowledge_references": ["CTX-..."],
+  "uncertainty_statements": ["...", "..."],
+  "recommended_next_steps": ["...", "..."]
+}}
+```
+Do not include any text before or after the JSON block.
