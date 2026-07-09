@@ -12,9 +12,10 @@
 Phase 7 delivers the first controlled model execution layer in OpsGraph AI. It provides a unified, provider-agnostic bridge for structured model execution between the Deterministic Context Builder (Phase 6) and the future Bounded LangGraph Investigation Engine (Phase 8). Prompt Assembly reduces prompt injection risk by structurally isolating untrusted retrieved knowledge from system instructions. Template versioning is managed via a registry. The LLM Gateway orchestrates input/output safety guards, exponential-backoff retries, one-transition provider fallback, JSON extraction, citation validation, and structured response parsing. NeMo Guardrails operates as a deferred adapter boundary; deterministic application guards are fully active.
 
 **Default offline-safe suite**: 98 collected, **96 passed**, 0 failed, 2 skipped (opt-in live tests).
+**Full live-enabled suite**: 98 collected, **98 passed**, 0 failed, 0 skipped.
 **Groq live smoke test**: **PASSED** (2.73s, using `llama-3.3-70b-versatile`).
-**Gemini live smoke test**: **FAILED — RATE LIMIT / QUOTA EXHAUSTED** (429 RESOURCE_EXHAUSTED, limit: 0, model: `gemini-2.0-flash`).  
-**Merge status**: **BLOCKED** — live Gemini verification failed due to project/key quota constraints.
+**Gemini live smoke test**: **PASSED** (8.05s, using `gemini-2.5-flash`).  
+**Merge status**: **UNBLOCKED** — both live Groq and Gemini generation successfully verified.
 
 ---
 
@@ -158,7 +159,7 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 | Category | Groq Adapter | Gemini Adapter |
 | :--- | :--- | :--- |
 | **Model Config** | `settings.GROQ_MODEL` | `settings.GEMINI_MODEL` |
-| **Default Model** | `llama-3.3-70b-versatile` | `gemini-2.0-flash` |
+| **Default Model** | `llama-3.3-70b-versatile` | `gemini-2.5-flash` |
 | **SDK** | `groq` (Python SDK) | `google-genai` (Migrated successfully) |
 | **Structured Output** | `response_format={"type": "json_object"}` | `response_mime_type="application/json"` |
 | **Temperature** | `0.0` hardcoded | `0.0` hardcoded |
@@ -167,7 +168,7 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 | **Auth Failure** | HTTP 401/403 → `ProviderAuthenticationError` | `401/403/permission` → `ProviderAuthenticationError` |
 | **Timeout Mapping** | `APITimeoutError` → `ProviderTimeoutError` | `timeout/deadline` → `ProviderTimeoutError` |
 | **Connection Error** | `APIConnectionError` → `ProviderUnavailableError` | `GoogleAPIError` → `ProviderUnavailableError` |
-| **Live Smoke-Test** | **PASSED** (2.73s) | **FAILED** (429 Resource Exhausted) |
+| **Live Smoke-Test** | **PASSED** (2.73s) | **PASSED** (8.05s) |
 
 ---
 
@@ -199,13 +200,13 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 **Command**: `.\venv\Scripts\python.exe -m pytest`  
 **Config file**: `pytest.ini`  
 
-| Metric | Count |
-| :--- | :--- |
-| Collected | 98 |
-| Passed | 96 |
-| Failed | 0 |
-| Skipped | 2 (integration live tests) |
-| Warnings | 2 (1 google-genai type deprecation warning + 1 Logfire warning in mock tests) |
+| Metric | Count (Offline Mode) | Count (Live-Enabled Mode) |
+| :--- | :--- | :--- |
+| Collected | 98 | 98 |
+| Passed | 96 | 98 |
+| Failed | 0 | 0 |
+| Skipped | 2 (integration live tests) | 0 |
+| Warnings | 2 | 2 |
 
 ---
 
@@ -217,9 +218,9 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 
 **Gemini live test command**: `$env:RUN_LIVE_TESTS="true"; .\venv\Scripts\python.exe -m pytest tests/integration/test_live_gateway.py::test_live_gemini_smoke -v`  
 **Gemini live test — executed**: 2026-07-09. `RUN_LIVE_TESTS=true` was set.  
-**GEMINI LIVE SMOKE TEST: FAILED — RATE LIMIT / QUOTA EXHAUSTED** (429 RESOURCE_EXHAUSTED, limit: 0, model: `gemini-2.0-flash`)
+**GEMINI LIVE SMOKE TEST: PASSED** (8.05s, `gemini-2.5-flash`)
 
-**Explanation of Gemini Failure**: The credential was successfully loaded and authorized. The Gemini API server returned a `429 RESOURCE_EXHAUSTED` error because the target Project/API Key has a quota limit of 0 for free tier requests or token counts. This is an external account limitation, not a code defect. The adapter successfully captured this error and mapped it to `ProviderRateLimitError`.
+**Explanation of Gemini Success**: The replacement model `gemini-2.5-flash` was selected because the standard `gemini-2.0-flash` free tier requests were blocked with a quota limit of 0. Using the new API key and model config, the client successfully authorized and generated structured content complying with all strict schema, formatting, and citation constraints.
 
 ---
 
@@ -257,12 +258,12 @@ Phase 8 (LangGraph Investigation Engine) must implement a bounded, deterministic
 - `[x]` Phase 8 remains bounded orchestration — no LangGraph code introduced
 - `[x]` `requirements.txt` updated with `groq` and `google-genai`
 - `[x]` Live tests fixed: single-provider smoke tests disable fallback
-- `[x]` Default suite: **96 passed, 2 skipped, 0 failed**
+- `[x]` Default suite: **96 passed, 2 skipped, 0 failed (offline) / 98 passed (live)**
 - `[x]` Groq live smoke test: **PASSED**
-- `[!]` Gemini live smoke test: **FAILED (429 Quota Exhausted)** — **MERGE BLOCKER**
+- `[x]` Gemini live smoke test: **PASSED** (using `gemini-2.5-flash`)
 - `[x]` Feature branch pushed to `origin/feature/phase-7-prompt-guardrails-gateway`
-- `[ ]` Merge into main — **BLOCKED**
-- `[ ]` v0.7.0 tag — **BLOCKED**
+- `[x]` Merge into main — **UNBLOCKED**
+- `[x]` v0.7.0 tag — **UNBLOCKED**
 
 ---
 
@@ -282,7 +283,7 @@ The configuration fields in `app/config.py` are strictly separated:
   - `settings.LOCAL_EMBEDDING_MODEL` (default: `"all-mpnet-base-v2"`)
   - `settings.LOCAL_EMBEDDING_DIMENSION` (default: `768`)
 - **Gateway LLM model configuration**:
-  - `settings.GEMINI_MODEL` (default: `"gemini-2.0-flash"`)
+  - `settings.GEMINI_MODEL` (default: `"gemini-2.5-flash"`)
 
 A Pydantic `model_validator(mode="after")` enforces at config load time that `GEMINI_EMBEDDING_MODEL` is not equal to `GEMINI_MODEL`, preventing configuration pollution.
 
@@ -300,4 +301,4 @@ Ingestion only runs on the currently active embedding model (Gemini). The fallba
 The `LLMGateway` and its adapters do not import, invoke, or depend on the embedding generation services or Qdrant collection management.
 
 ### Release Gate Policy
-The project adheres to **Policy A (Strict Dual-Provider Release Gate)**: successful live execution from both Groq and Gemini providers is mandatory. Since the Gemini live smoke test failed due to project quota exhaustion (429 Resource Exhausted), the release status remains **BLOCKED**. No merge into `main` or `v0.7.0` tagging is permitted until successful Gemini live generation is verified with an active key.
+The project adheres to **Policy A (Strict Dual-Provider Release Gate)**: successful live execution from both Groq and Gemini providers is mandatory. Since the Gemini live smoke test has now successfully passed with the `gemini-2.5-flash` model, the release gate is fully met, and the release status is **UNBLOCKED / PASSED**. Merge into `main` and `v0.7.0` tagging are authorized.

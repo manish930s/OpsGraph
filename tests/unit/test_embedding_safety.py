@@ -39,8 +39,8 @@ def test_settings_separation_validation():
     # 1. Collision between embedding model and gateway model
     with pytest.raises(ValidationError) as exc:
         Settings(
-            GEMINI_EMBEDDING_MODEL="gemini-2.0-flash",
-            GEMINI_MODEL="gemini-2.0-flash"
+            GEMINI_EMBEDDING_MODEL="gemini-2.5-flash",
+            GEMINI_MODEL="gemini-2.5-flash"
         )
     assert "cannot be the same as Gemini LLM generation model" in str(exc.value)
 

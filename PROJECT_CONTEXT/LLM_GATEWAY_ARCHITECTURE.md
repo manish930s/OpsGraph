@@ -70,7 +70,7 @@ The assembler separates instruction from data at compile time:
 | Category | Groq Adapter | Gemini Adapter |
 | :--- | :--- | :--- |
 | **Config Key** | `LLM_DEFAULT_PROVIDER = "groq"` | `LLM_DEFAULT_PROVIDER = "gemini"` |
-| **Model Config** | `settings.GROQ_MODEL` (default: `llama-3.3-70b-versatile`) | `settings.GEMINI_MODEL` (default: `gemini-2.0-flash`) |
+| **Model Config** | `settings.GROQ_MODEL` (default: `llama-3.3-70b-versatile`) | `settings.GEMINI_MODEL` (default: `gemini-2.5-flash`) |
 | **SDK** | `groq` (Groq Python SDK) | `google-genai` (Migrated successfully) |
 | **Structured Output Mode** | `response_format={"type": "json_object"}` | `response_mime_type="application/json"` |
 | **Temperature** | `0.0` (hardcoded deterministic) | `0.0` (hardcoded deterministic) |
@@ -83,11 +83,11 @@ The assembler separates instruction from data at compile time:
 | **Timeout Mapping** | `APITimeoutError` → `ProviderTimeoutError` | `timeout/deadline` → `ProviderTimeoutError` |
 | **Connection Error Mapping** | `APIConnectionError` → `ProviderUnavailableError` | `GoogleAPIError` → `ProviderUnavailableError` |
 | **Mock Mode** | Returns deterministic JSON when `LLM_PROVIDER = "mock"` | Returns deterministic JSON when `LLM_PROVIDER = "mock"` |
-| **Live Smoke-Test Status** | **PASSED** (2.73s) | **FAILED** (429 Quota Exhausted) |
+| **Live Smoke-Test Status** | **PASSED** (2.73s) | **PASSED** (8.05s) |
 
 ### Workload Configuration Separation
 `GeminiProvider` is used exclusively for LLM text generation. It does **not** import, invoke, or depend on any embedding models or Qdrant collection management. 
-- **LLM Generation Model**: Configured via `settings.GEMINI_MODEL` (default: `gemini-2.0-flash`).
+- **LLM Generation Model**: Configured via `settings.GEMINI_MODEL` (default: `gemini-2.5-flash`).
 - **Embedding Model**: Configured separately via `settings.GEMINI_EMBEDDING_MODEL` (default: `models/gemini-embedding-2-preview`).
 A Pydantic `model_validator` in `config.py` prevents accidental reuse or config leakage between the two workloads.
 
@@ -194,7 +194,7 @@ The new `google-genai` SDK (specifically `google/genai/types.py`) emits a `Depre
 
 ### Live Provider Verification Status — *Operational Status (2026-07-09)*
 - **Groq (Llama 3.3)**: **PASSED** (2.73s, using key in `.env`). Basic connectivity, response formatting, extraction, and validation are verified.
-- **Gemini (Gemini 2.0 Flash)**: **FAILED — 429 Resource Exhausted**. The API key successfully authorized, but the target project has a quota limit of 0 for free tier requests or input tokens. Connectivity and exception mapping are verified, but execution is blocked by quota constraints.
+- **Gemini (Gemini 2.5 Flash)**: **PASSED** (8.05s, using key in `.env`). Full generation, structured parsing, extraction, and validation are verified.
 
 ### Usage Metadata and Finish Reason Not Extracted — *Current Limitation*
 Neither the Groq nor Gemini adapter currently extracts `usage_metadata` (token counts) or `finish_reason` from the actual provider SDK response. These fields exist in `LLMExecutionMetadata` but are populated with defaults. Extracting them would improve observability and token-cost accounting.
@@ -205,7 +205,7 @@ Neither adapter captures the provider-side request ID from response headers/meta
 ### Live Provider Verification — *Operational Status (2026-07-09)*
 Live tests were executed by opting-in with `RUN_LIVE_TESTS=true`:
 - **Groq (Llama 3.3)**: **PASSED**. Full content generation, structured parsing, extraction, and validation are verified.
-- **Gemini (Gemini 2.0 Flash)**: **FAILED (429 Quota Exhausted)**. Client instantiation, credential loading, connection, and error mapping to `ProviderRateLimitError` are verified. Successful text generation has not yet been verified due to a quota limit of 0 on the developer account.
+- **Gemini (Gemini 2.5 Flash)**: **PASSED** (8.05s). Client instantiation, credential loading, connection, content generation, and deterministic output schema parsing are verified.
 
 ### Provider SDK Version Pinning — *Deferred Decision*
 `requirements.txt` declares `groq` and `google-genai` without version pins. `requirements-prod.txt` pins versions for production Cloud Run. Local development reproducibility depends on pip resolution at install time.
