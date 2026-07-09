@@ -201,11 +201,11 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 
 | Metric | Count |
 | :--- | :--- |
-| Collected | 89 |
-| Passed | 87 |
+| Collected | 93 |
+| Passed | 91 |
 | Failed | 0 |
 | Skipped | 2 (integration live tests) |
-| Warnings | 1 (Gemini type deprecation warning in Python 3.17) |
+| Warnings | 2 (1 google-genai type deprecation warning + 1 Logfire warning in mock tests) |
 
 ---
 

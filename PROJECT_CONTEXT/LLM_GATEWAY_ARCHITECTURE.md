@@ -202,15 +202,17 @@ Neither the Groq nor Gemini adapter currently extracts `usage_metadata` (token c
 ### Provider Request ID Not Extracted — *Current Limitation*
 Neither adapter captures the provider-side request ID from response headers/metadata. This field exists in `LLMExecutionMetadata` but is `None` in practice. Provider request IDs are important for support escalations.
 
-### Live Provider Verification — *Operational Concern*
-No live smoke tests have been executed in this environment. Both Groq and Gemini tests skip cleanly when API keys are absent. **Status: NOT EXECUTED — API keys unavailable in execution environment.**
+### Live Provider Verification — *Operational Status (2026-07-09)*
+Live tests were executed by opting-in with `RUN_LIVE_TESTS=true`:
+- **Groq (Llama 3.3)**: **PASSED**. Full content generation, structured parsing, extraction, and validation are verified.
+- **Gemini (Gemini 2.0 Flash)**: **FAILED (429 Quota Exhausted)**. Client instantiation, credential loading, connection, and error mapping to `ProviderRateLimitError` are verified. Successful text generation has not yet been verified due to a quota limit of 0 on the developer account.
 
 ### Provider SDK Version Pinning — *Deferred Decision*
-`requirements.txt` declares `groq` and `google-generativeai` without version pins. `requirements-prod.txt` pins versions for production Cloud Run. Local development reproducibility depends on pip resolution at install time.
+`requirements.txt` declares `groq` and `google-genai` without version pins. `requirements-prod.txt` pins versions for production Cloud Run. Local development reproducibility depends on pip resolution at install time.
 
 ### Structured Output Mode Differences — *Operational Concern*
 - **Groq**: Uses `response_format={"type": "json_object"}`. The model is instructed to produce JSON; the API enforces JSON tokenization constraints.
-- **Gemini**: Uses `response_mime_type="application/json"` in `GenerationConfig`. The API returns content typed as JSON but does not guarantee schema compliance.
+- **Gemini**: Uses `response_mime_type="application/json"` in `types.GenerateContentConfig`. The API returns content typed as JSON but does not guarantee schema compliance.
 - In both cases, `extract_json_payload()` strips any markdown fences before the output guard processes content.
 
 ### Quota and Rate-Limit Behavior — *Operational Concern*
@@ -222,7 +224,7 @@ Provider quotas and free-tier availability are operational conditions, not archi
 - Fallback is availability-oriented: if Groq is unavailable, Gemini is tried. There is no quality-based routing, cost optimization, or latency-based routing.
 
 ### Model Quality Evaluation — *Not Implemented*
-No systematic quality comparison between Groq (Llama 3.3) and Gemini (Gemini 1.5 Flash) exists. Provider quality routing is not implemented.
+No systematic quality comparison between Groq (Llama 3.3) and Gemini (Gemini 2.0 Flash) exists. Provider quality routing is not implemented.
 
 ### Cost-Aware Routing — *Not Implemented*
 Request-cost optimization is not implemented. The gateway selects providers based on configuration and availability only.

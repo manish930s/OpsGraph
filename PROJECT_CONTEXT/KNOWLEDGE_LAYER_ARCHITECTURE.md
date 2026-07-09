@@ -138,7 +138,7 @@ Candidates fused via RRF are passed to the `FlashRankReranker`:
 ## 8. Degraded Mode & Runtime Signaling
 To prevent silent runtime failures, the retriever attaches a `RetrievalExecutionMetadata` status report to each `KnowledgeBundle` containing:
 *   `vector_store_mode`: `"qdrant"` or `"memory"`
-*   `embedding_mode`: `"sentence-transformer"` or `"mock"`
+*   `embedding_mode`: `"gemini"`, `"sentence-transformer"`, `"sentence-transformer-fallback"`, or `"mock"`
 *   `reranker_mode`: `"flashrank"` or `"lexical-fallback"`
 *   `degraded_mode`: `True` if any fallback occurred (e.g. mock embedding or memory vector database)
 *   `fallback_reasons`: Structured string warnings explaining why degraded status was engaged.
