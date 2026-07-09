@@ -3,6 +3,7 @@
 **Phase:** Phase 7 — Prompt Assembly, Guardrails, and Provider-Agnostic LLM Gateway  
 **Execution Date:** 2026-07-09  
 **Python Runtime:** CPython 3.14.0 (Windows)  
+**Live Verification Status:** BLOCKED — provider API keys not present in execution environment  
 
 ---
 
@@ -10,7 +11,10 @@
 
 Phase 7 delivers the first controlled model execution layer in OpsGraph AI. It provides a unified, provider-agnostic bridge for structured model execution between the Deterministic Context Builder (Phase 6) and the future Bounded LangGraph Investigation Engine (Phase 8). Prompt Assembly reduces prompt injection risk by structurally isolating untrusted retrieved knowledge from system instructions. Template versioning is managed via a registry. The LLM Gateway orchestrates input/output safety guards, exponential-backoff retries, one-transition provider fallback, JSON extraction, citation validation, and structured response parsing. NeMo Guardrails operates as a deferred adapter boundary; deterministic application guards are fully active.
 
-The full suite collected **88 tests: 86 passed, 0 failed, and 2 opt-in live integration tests were skipped because provider API keys were unavailable in the execution environment.**
+**Default offline-safe suite**: 88 collected, **86 passed**, 0 failed, 2 skipped (opt-in live tests).  
+**Groq live smoke test**: NOT EXECUTED — `GROQ_API_KEY` not present in execution environment.  
+**Gemini live smoke test**: NOT EXECUTED — `GEMINI_API_KEY` not present in execution environment.  
+**Merge status**: BLOCKED — live provider verification is a required pre-merge gate condition.
 
 ---
 
@@ -219,21 +223,26 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 
 **Warning**: `FutureWarning` from `google-generativeai` — the SDK is fully deprecated and will be replaced by `google-genai`. Functional impact: none today.
 
-**Skipped tests**: Both are in `tests/integration/test_live_gateway.py` and skip because `RUN_LIVE_TESTS` is not set.
+**Skipped tests**: Both are in `tests/integration/test_live_gateway.py`. They skip when `GROQ_API_KEY` / `GEMINI_API_KEY` is absent from the environment, regardless of `RUN_LIVE_TESTS` value. The outer `pytestmark` `skipif` fires when `RUN_LIVE_TESTS` is unset; the inner `@pytest.mark.skipif` fires when the specific key is absent.
 
 ---
 
 ## 15. Live Smoke Tests
 
-**Command (Groq)**: `$env:RUN_LIVE_TESTS="true"; $env:GROQ_API_KEY="<key>"; .\venv\Scripts\python.exe -m pytest tests/integration/test_live_gateway.py::test_live_groq_smoke -v`  
-**Groq Live Smoke Test**: **NOT EXECUTED — API key unavailable in execution environment**
+**Groq live test command**: `$env:RUN_LIVE_TESTS="true"; .\venv\Scripts\python.exe -m pytest tests/integration/test_live_gateway.py::test_live_groq_smoke -v`  
+**Groq live test — executed**: 2026-07-09. `RUN_LIVE_TESTS=true` was set. `GROQ_API_KEY` was absent from the execution environment (no `.env` file present, key not in `os.environ`).  
+**GROQ LIVE SMOKE TEST: NOT EXECUTED — API key unavailable in execution environment** (1 skipped, 0 passed, 0 failed)
 
-**Command (Gemini)**: `$env:RUN_LIVE_TESTS="true"; $env:GEMINI_API_KEY="<key>"; .\venv\Scripts\python.exe -m pytest tests/integration/test_live_gateway.py::test_live_gemini_smoke -v`  
-**Gemini Live Smoke Test**: **NOT EXECUTED — API key unavailable in execution environment**
+**Gemini live test command**: `$env:RUN_LIVE_TESTS="true"; .\venv\Scripts\python.exe -m pytest tests/integration/test_live_gateway.py::test_live_gemini_smoke -v`  
+**Gemini live test — executed**: 2026-07-09. `RUN_LIVE_TESTS=true` was set. `GEMINI_API_KEY` was absent from the execution environment.  
+**GEMINI LIVE SMOKE TEST: NOT EXECUTED — API key unavailable in execution environment** (1 skipped, 0 passed, 0 failed)
 
-Each live test is independently guarded: missing one provider key skips only that provider's test, not the other.
+**Skip mechanism verified**: Each test skips independently with its own `@pytest.mark.skipif(not os.environ.get("GROQ_API_KEY"), ...)` guard. One provider's missing key does not block the other. The skip is clean — no error, no assertion failure.
 
----
+**Credential loading verification**: `settings.GROQ_API_KEY` and `settings.GEMINI_API_KEY` both resolved to `None`. Pydantic Settings `env_file=".env"` resolved to `D:\Advance RAG\opsgraph-ai\.env` which does not exist. Neither key is set in the OS environment. No `.env` file exists anywhere in the workspace.
+
+**Required action for live verification**: Place a `.env` file at `D:\Advance RAG\opsgraph-ai\.env` containing `GROQ_API_KEY` and `GEMINI_API_KEY`, then rerun with `$env:RUN_LIVE_TESTS="true"`.
+
 
 ## 16. Technical Debt Assessment
 
@@ -276,26 +285,26 @@ Phase 8 (LangGraph Investigation Engine) must implement a bounded, deterministic
 ## 18. Exit Checklist
 
 - `[x]` Active branch: `feature/phase-7-prompt-guardrails-gateway`
-- `[x]` `.env` verified ignored by git
-- `[x]` `.env.*` variants now ignored; `.env.example` remains tracked
+- `[x]` `.env` verified ignored by git (`git check-ignore .env` → `.env`)
+- `[x]` `.env.*` variants ignored; `.env.example` tracked (`git ls-files .env.example` → present)
 - `[x]` No API key values in any source file, test, or documentation
-- `[x]` GROQ_API_KEY availability checked — False (key not present)
-- `[x]` GEMINI_API_KEY availability checked — False (key not present)
+- `[x]` GROQ_API_KEY availability checked — **False** (key not present in environment or `.env` file)
+- `[x]` GEMINI_API_KEY availability checked — **False** (key not present in environment or `.env` file)
 - `[x]` Output pipeline traced from actual code — documented accurately
 - `[x]` Architecture diagram matches implementation
 - `[x]` JSON extraction responsibility is explicit (`extract_json_payload` module function)
 - `[x]` Output Guard responsibility is explicit (pipeline façade — documented)
 - `[x]` Citation validation source of truth is `ModelRequest.context_references`
 - `[x]` Provider capability matrix verified against adapter code
-- `[x]` Test summary wording is mathematically correct (86 passed + 2 skipped ≠ "all passed")
+- `[x]` Test summary wording is mathematically correct
 - `[x]` Technical debt section covers real operational limitations
 - `[x]` NeMo status remains truthful (deferred, not active)
 - `[x]` Phase 8 remains bounded orchestration — no LangGraph code introduced
 - `[x]` `requirements.txt` updated with `groq` and `google-generativeai`
-- `[x]` Live tests fixed: single-provider smoke tests disable fallback to avoid validate_configuration rejection
-- `[x]` Default suite: 86 passed, 2 skipped, 0 failed
-- `[x]` Groq live smoke test: NOT EXECUTED — API key unavailable
-- `[x]` Gemini live smoke test: NOT EXECUTED — API key unavailable
-- `[x]` Feature branch pushed
-- `[ ]` Merge into main — awaiting human review
-- `[ ]` v0.7.0 tag — awaiting human review
+- `[x]` Live tests fixed: single-provider smoke tests disable fallback
+- `[x]` Default suite: **86 passed, 2 skipped, 0 failed** (confirmed 2026-07-09)
+- `[!]` Groq live smoke test: **NOT EXECUTED** — `GROQ_API_KEY` unavailable — **MERGE BLOCKER**
+- `[!]` Gemini live smoke test: **NOT EXECUTED** — `GEMINI_API_KEY` unavailable — **MERGE BLOCKER**
+- `[x]` Feature branch pushed to `origin/feature/phase-7-prompt-guardrails-gateway`
+- `[ ]` Merge into main — **BLOCKED** — live provider tests must pass first
+- `[ ]` v0.7.0 tag — **BLOCKED** — merge must complete first
