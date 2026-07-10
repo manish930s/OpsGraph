@@ -11,12 +11,7 @@
 
 Phase 9 establishes a rigorous, offline-safe evaluation and benchmarking framework for OpsGraph AI. Having successfully implemented the stateful, bounded investigation graph in Phase 8, we must systematically measure the quality of generated root-cause analyses (RCAs), the accuracy and precision of telemetry tool invocations, the correctness of critic decisions, and overall execution safety.
 
-This plan details:
-*   **Evaluation Levels**: Ranging from component-level metrics (retrieval, prompt templates) to full-system scenario benchmarks.
-*   **Deterministic Metric Library**: Heavy prioritization of fast, rule-based python evaluators (checking citations, tool calls, and service categories) over costly, non-deterministic LLM-as-judge runs.
-*   **Golden Scenario Schema**: Verification against verified, synthetically-generated incidents like `SCN-DB-POOL-001`.
-*   **Evaluation Runner CLI**: An offline-safe command-line execution engine supporting mock and live modes.
-*   **Safety Gates**: Automated CI regression criteria enforcing budget limits, citation validity, and zero credential leaks.
+This revised plan addresses crucial evaluation requirements, separating dataset split semantics from scenario ambiguity, defining explicit terminal outcome contracts, and implementing mathematically sound metric formulas. It prioritizes fast, rule-based python evaluators over costly, non-deterministic LLM-as-judge runs, laying out a baseline-first path to quality benchmarking.
 
 ---
 
@@ -24,7 +19,7 @@ This plan details:
 
 An audit of the repository shows the following evaluation-ready files and datasets are already implemented and available:
 
-1.  **Scenario Definitions Directory** (`data/scenarios/definitions/`):
+1.  **Scenario Definitions Directory** (`DATA/scenarios/definitions/`):
     *   `SCN-DB-POOL-001.json`: Medium-difficulty database connection pool regression incident. Maps the timeline, required evidence types, expected tools, and acceptable remediation codes.
 2.  **Synthetic Scenario Telemetry** (`DATA/generated/SCN-DB-POOL-001/`):
     *   `incident.json`: Ground-truth incident record details (`INC-0042`).
@@ -44,8 +39,8 @@ An audit of the repository shows the following evaluation-ready files and datase
 ### Goals
 *   **Deterministic Auditing**: Validate citation correctness, budget utilization, and terminal states using zero-token python logic.
 *   **Investigation Quality Assessment**: Measure if the graph collects all necessary telemetry evidence before reaching an ACCEPT decision.
-*   **Calibrated Escalation**: Ensure that the critic correct routes to `human_review` under ambiguous or incomplete data and terminates with `failure` under parameter mismatches.
-*   **Zero Leakage**: Enforce safety limits to ensure that API credentials never appear in diagnostic logs or error state outputs.
+*   **Calibrated Escalation**: Ensure that the critic correctly routes to `human_review` under ambiguous or incomplete data and terminates with `failure` under parameter mismatches.
+*   **Leakage Verification**: Detect known credential leakage into evaluation artifacts, traces, failure payloads, and reports.
 *   **Regression Guarding**: Provide a runnable command-line interface to catch quality degradations before merging code changes.
 
 ### Non-Goals
@@ -86,7 +81,7 @@ OpsGraph AI is evaluated at four distinct levels:
 
 ## 5. Golden Scenario Contract
 
-The evaluation runner loads targets using the existing `GoldenCase` Pydantic model (`app/schemas/rca.py`):
+To decouple dataset split metadata from scenario resolution policies and prevent implicit signals, the golden scenario schema is designed as follows:
 
 ```json
 {
@@ -100,6 +95,9 @@ The evaluation runner loads targets using the existing `GoldenCase` Pydantic mod
     "root_cause_code": "DB_POOL_MAX_CONNECTIONS_REGRESSION",
     "root_cause_summary": "Invalid connection pool configuration introduced during deployment."
   },
+  "ambiguity": "unambiguous",
+  "expected_terminal_outcome": "finalize_rca",
+  "acceptable_terminal_outcomes": ["finalize_rca"],
   "required_evidence_ids": [
     "DEPLOY-EV-0042-001",
     "METRIC-EV-0042-001",
@@ -123,232 +121,216 @@ The evaluation runner loads targets using the existing `GoldenCase` Pydantic mod
 }
 ```
 
-### Mandated and Optional Fields
-*   **Mandatory**: `scenario_id`, `incident_id`, `split`, `labels`, `required_evidence_ids`.
-*   **Optional**: `expected_tools`, `acceptable_remediation_codes`, `forbidden_unsupported_causes`.
-*   **Ambiguous Incidents Representation**: Handled by setting `split="test"` and including multiple items in `acceptable_remediation_codes` or leaving `required_evidence_ids` empty to force a correct `human_review` escalation.
+### Key Contract Mappings
+1.  **Dataset Splits**: Distinct values for `split`: `dev`, `validation`, and `test`.
+2.  **Ambiguity Level**: Explicitly captured via `ambiguity`: `unambiguous` (clear causal chain), `partially_ambiguous` (some missing telemetry, may require exploration), or `irreducibly_ambiguous` (contradictory logs or missing sources, must trigger human review).
+3.  **Expected Terminal Outcome**: Mapped via `expected_terminal_outcome` and `acceptable_terminal_outcomes` (representing one or more acceptable terminal states: `finalize_rca`, `human_review`, or `failure`).
+4.  **Evidence IDs**: Explicitly defined required evidence IDs. An empty list is no longer an implicit signal for human review; the terminal state must be explicitly set to `human_review`.
+5.  **Multi-Answer Root Cause Support**:
+    *   `labels.root_cause_code`: The canonical root cause.
+    *   `acceptable_root_cause_codes` (optional list): Semantically equivalent codes.
+    *   `forbidden_unsupported_causes`: Root causes that must not be proposed.
 
 ---
 
 ## 6. Metric Definitions
 
+Every metric enforces strict input checks, duplicate handling rules, and mathematical safety.
+
 ### A. Evidence Retrieval and Citations (Deterministic)
 *   **Evidence ID Recall**:
     *   *Definition*: The proportion of required scenario evidence items successfully collected in `evidence_list`.
-    *   *Required Inputs*: Graph final state `evidence_list`, Golden `required_evidence_ids`.
     *   *Formula*: $|collected \cap required| / |required|$
-    *   *Range*: `[0.0, 1.0]` (where 1.0 means all required evidence was gathered).
-*   **Citation Precision**:
-    *   *Definition*: The proportion of cited evidence IDs in `current_rca` that are actually present in the graph's `evidence_list`.
-    *   *Required Inputs*: `RCADecisionResponse` supporting/contradicting references, state `evidence_list`.
-    *   *Formula*: $|cited\_references \cap evidence\_list| / |cited\_references|$
-    *   *Range*: `[0.0, 1.0]` (where 1.0 means zero hallucinated citations).
+    *   *Empty Denominator Policy*: If `required_evidence_ids` is empty, this metric returns `N/A` (omitted from aggregate averaging).
+    *   *Duplicate Handling*: Evidence items are deduplicated by `evidence_id` prior to comparison.
+    *   *Aggregation Method*: Macro average across applicable scenarios.
+*   **Citation Validity**:
+    *   *Definition*: The proportion of cited evidence IDs in the RCA response that are actually present in the graph's `evidence_list`.
+    *   *Formula*: $|cited\_references \cap evidence\_list\_ids| / |cited\_references|$
+    *   *Empty Denominator Policy*: If `cited_references` is empty, returns `1.0` if no required evidence was defined, otherwise `0.0`.
+    *   *Duplicate Handling*: Cited references are deduplicated prior to scoring.
+    *   *Aggregation Method*: Macro average.
+*   **Citation Relevance (Semantic)**:
+    *   *Definition*: Measures whether the cited evidence actually supports or contradicts the associated claim. (Requires semantic verification via sentence embedding or optional LLM judge).
 
 ### B. RCA Accuracy (Deterministic & Semantic)
 *   **Service Localization Accuracy**:
-    *   *Definition*: Binary indicator matching if the generated RCA correctly identifies the root service.
-    *   *Required Inputs*: State `current_rca`, Golden `labels.affected_service`.
-    *   *Range*: `{0, 1}` (where 1 represents an exact match).
+    *   *Definition*: Exact string match on the target affected service.
+    *   *Formula*: `1` if `current_rca.primary_hypothesis.affected_service == labels.affected_service` else `0`.
+    *   *Empty Denominator Policy*: N/A (always has a service value).
+    *   *Aggregation Method*: Simple Accuracy.
 *   **Remediation Relevance**:
-    *   *Definition*: Match rate of recommended actions to acceptable remediation codes.
-    *   *Required Inputs*: State `current_rca.recommended_actions`, Golden `acceptable_remediation_codes`.
+    *   *Definition*: Evaluates if the recommended actions correspond to acceptable remediation codes.
+    *   *Mapping Strategy*: Since generated actions (`recommended_actions`) are natural language objects with type enums, we map the enum `type` (`ActionType`) or match action description substrings to the expected `acceptable_remediation_codes` list.
     *   *Range*: `[0.0, 1.0]`.
-*   **Root-Cause Semantic Similarity** (LLM Judge / Vector Similarity):
-    *   *Definition*: Similarity score between the model's generated `summary` and the golden `root_cause_summary`.
-    *   *Required Inputs*: State `current_rca.summary`, Golden `labels.root_cause_summary`.
-    *   *Range*: `[0.0, 1.0]` (calculated using Cosine Similarity over local embeddings or structured LLM scoring).
 
 ### C. Execution Efficiency (Deterministic)
 *   **Tool Execution Precision**:
-    *   *Definition*: Ratio of expected diagnostic tool invocations to total tool invocations.
-    *   *Required Inputs*: Trace history of tool calls, Golden `expected_tools`.
-    *   *Formula*: $|called \cap expected| / |called|$
-    *   *Range*: `[0.0, 1.0]`.
+    *   *Definition*: Evaluates tool selection efficiency without penalizing alternative valid paths.
+    *   *Scoring Rules*:
+        *   Golden scenario contract specifies `required_tools`, `acceptable_tools`, and `forbidden_tools`.
+        *   If any tool in `forbidden_tools` is called $\rightarrow$ Precision is penalized.
+        *   If all `required_tools` are called and no forbidden tools are called $\rightarrow$ Precision is `1.0`.
+        *   Additional allowed tools in `acceptable_tools` do not penalize the score. Unlisted tools are classed as `unnecessary_tools` and introduce a small penalty.
 *   **Iteration Efficiency**:
-    *   *Definition*: Efficiency of graph cycle usage.
-    *   *Required Inputs*: State `iteration_count`.
-    *   *Formula*: $1.0 - (iteration\_count - 1) / INVESTIGATION\_MAX\_ITERATIONS$ (normalized).
-    *   *Range*: `[0.0, 1.0]`.
+    *   *Definition*: Measures efficiency of graph cycles conditional on outcome correctness.
+    *   *Formula*: If terminal state and RCA correctness score $\ge 0.80$, score is $1.0 - (iteration\_count - 1) / INVESTIGATION\_MAX\_ITERATIONS$, otherwise `0.0`.
+    *   *Rationale*: Prevents incorrect one-iteration failures from getting high efficiency scores.
 
 ### D. Decision and Calibration (Deterministic)
 *   **Critic Accuracy**:
-    *   *Definition*: Evaluates if the critic correctly accepted, rejected, or continued based on evidence presence.
-    *   *Required Inputs*: State `critic_decision.decision`, Golden `required_evidence_ids`.
+    *   *Definition*: Evaluates if the critic decision correctly matches required evidence completeness.
     *   *Scoring*:
-        *   If `ACCEPT` is returned but required evidence is missing $\rightarrow$ Score = `0` (False Acceptance).
-        *   If `ACCEPT` is returned and all required evidence is present $\rightarrow$ Score = `1` (Correct Acceptance).
+        *   If decision is `ACCEPT` but required evidence is missing $\rightarrow$ Score = `0` (False Acceptance).
+        *   If decision is `ACCEPT` and required evidence is present $\rightarrow$ Score = `1` (Correct Acceptance).
+        *   If decision is `CONTINUE_INVESTIGATION` and required evidence is missing $\rightarrow$ Score = `1` (Correct Continuation).
+        *   If decision is `CONTINUE_INVESTIGATION` and required evidence is already present $\rightarrow$ Score = `0` (Unnecessary Continuation).
 
 ---
 
-## 7. Node-Level Evaluation Mapping
+## 7. Metric Applicability Matrix by Evaluation Mode
 
-| Node Name | Key Metric | Target / Range | Evaluator Type |
-|---|---|---|---|
-| `initialize` | Setup status | Binary `{0,1}` | Deterministic |
-| `build_context` | Token count compliance | Within budget (< 4000 words) | Deterministic |
-| `generate_hypothesis` | Schema compliance | Valid JSON structure | Deterministic |
-| `evaluate_hypothesis` | Confidence calibration | Correlation with evidence | Deterministic |
-| `identify_evidence_gap` | Gap detection accuracy | Matches missing required codes | Deterministic |
-| `select_tool` | Parameter schemas validity | Valid against registry models | Deterministic |
-| `execute_tool` | Execution success rate | Mapped error boundaries | Deterministic |
-| `validate_evidence` | Deduplication accuracy | Unique ID sets preserved | Deterministic |
-| `rebuild_context` | Context latency | `< 800ms` | Deterministic |
+Different evaluation modes support different metric categories.
 
----
+| Metric | Metric-Only Mode | Mock-Graph Mode | Offline-Component Mode | Live Mode |
+|---|---|---|---|---|
+| Citation Validity | Yes | Yes | No | Yes |
+| Evidence Recall | Yes | Yes | Yes | Yes |
+| Service Localization | Yes | Yes | No | Yes |
+| Critic Accuracy | Yes | Yes | No | Yes |
+| Iteration Efficiency | Yes | Yes | No | Yes |
+| Tool Precision | Yes | Yes | No | Yes |
 
-## 8. SRE Failure & Refusal Metrics
-
-To prevent collapsing all exit outcomes, terminal states are scored into fine-grained SRE metrics:
-
-1.  **Expected Failure Rate**: Correctly aborted runs on garbage or invalid schema inputs (e.g. invalid topologies). Mapped via `FailureTerminalState`.
-2.  **Unsafe Successful Completion Rate (Critical Failure)**: Occurs when a run exits with a successful `"RCA accepted by critic"` code but contains hallucinated, invalid, or missing required evidence. Must be 0%.
-3.  **Controlled Human Escalation Rate**: Ratio of runs exiting via `human_review` because of budget exhaustion or critic request. This is a valid, safe SRE outcome.
-4.  **Gateway Exhaustion Rate**: Runs ending in failure due to provider timeouts or rate-limiting.
+*   **Metric-Only Mode**: Evaluates pre-stored execution traces and prediction JSONs.
+*   **Mock-Graph Mode**: Executes the LangGraph orchestration engine using deterministic canned Gateway responses.
+*   **Offline-Component Mode**: Evaluates standalone retrieval, document chunking, and validation classes in isolation.
+*   **Live Mode**: Executes the graph against live provider backends (Groq/Gemini).
 
 ---
 
-## 9. Evaluation Runner Architecture
+## 8. Execution Trace Contract
 
-The framework implements a headless execution runner (`evals/runner.py`) containing the following stages:
+The runner records a structured execution trace object (`EvaluationTrace`) for auditing:
 
-```
-[Scenario List]
-      ↓
-[Scenario Loader] (reads definition & raw telemetry)
-      ↓
-[Graph Execution Loop] (mocks or executes LLMGateway requests)
-      ↓
-[Trace & Metrics Collector] (collects states, counts, and timings)
-      ↓
-[Deterministic Evaluators] (scores citations, schemas, and budgets)
-      ↓
-[Output Reporter] (writes JSONL and Markdown results)
-```
-
-### CLI Command Proposals
-The runner is invoked via command line parameters to isolate runs:
-
-```powershell
-# Run a single scenario
-python -m evals.run --scenario SCN-DB-POOL-001
-
-# Run a dev suite split (fully offline-safe)
-python -m evals.run --suite dev --provider mock
-
-# Run live provider tests (opt-in)
-python -m evals.run --suite benchmark --provider groq
+```python
+class EvaluationTrace(TypedDict):
+    scenario_id: str
+    investigation_id: str
+    node_sequence: list[str]                # Order of traversed nodes
+    node_timings: dict[str, float]          # Start/end latency per node
+    iteration_count: int
+    tool_calls: list[dict[str, Any]]        # Sanitized parameters & called tool names
+    evidence_ids: list[str]                 # Unique IDs of collected evidence items
+    critic_decisions: list[str]             # List of decision outputs ("ACCEPT", etc.)
+    critic_confidences: list[float]         # Progression of confidence scores
+    context_rebuild_count: int
+    provider_used: str                      # Final Gateway provider
+    fallback_occurrence: bool               # True if fallback triggered
+    termination_reason: str | None
+    final_terminal_type: str                # "finalize_rca", "human_review", "failure"
+    total_latency_ms: float
 ```
 
 ---
 
-## 10. Output Artifacts
+## 9. Baseline Experiments Matrix
 
-Every benchmark run produces a unique directory under `evals/results/<run_id>/`:
+Evaluation runs must keep providers constant to evaluate graph architecture differences.
 
-*   **`run_manifest.json`**: Captures metadata for reproducibility:
-    ```json
-    {
-      "run_id": "run_20260710_120000",
-      "timestamp": "2026-07-10T12:00:00Z",
-      "git_commit": "eef9690f30dc0037dcbafbb190a018c25d6f4d0c",
-      "generation_model": "llama-3.3-70b-versatile",
-      "embedding_model": "gemini-embedding-2-preview",
-      "max_iterations": 3,
-      "max_tool_calls": 6
-    }
-    ```
-*   **`scenario_results.jsonl`**: Individual scenario execution metrics.
-*   **`aggregate_metrics.json`**: Aggregated averages of precision, recall, latencies, and budget usage.
-*   **`report.md`**: Human-readable markdown summary detailing regressions.
+| Experiment ID | System Architecture | Provider | Model | Test Scenarios | Key Evaluated Metrics |
+|---|---|---|---|---|---|
+| **E-BASE-A** | One-Pass RAG-only | Groq | `llama-3.3-70b-versatile` | Dev Suite | Localization, Citation Validity |
+| **E-BASE-B** | Retrieval-augmented one-pass | Groq | `llama-3.3-70b-versatile` | Dev Suite | Localization, Recall |
+| **E-SYS-C** | Phase 8 Stateful Graph | Groq | `llama-3.3-70b-versatile` | Dev Suite | Recall, Tool Precision, Latency |
 
 ---
 
-## 11. Reproducibility Controls
+## 10. Regression Comparison Rules
 
-To combat provider non-determinism, the runner applies the following execution constraints:
-1.  **Strict Temperature**: Hardcoded to `0.0` for all evaluator or model calls.
-2.  **Configuration Snapping**: Serializes active `app/config.py` environment settings into the run manifest.
-3.  **Stable Seeds**: Mocks Scenario random generator seed values before running tools or generating telemetry.
+To prevent comparing aggregate scores blindly when scenario sets shift, the comparison runner applies these rules:
+1.  **Strict Caching**: Baseline runs are cached under a unique ID.
+2.  **Paired Comparisons**: Scenario metrics are compared pairwise (e.g. SCN-DB-POOL-001 in Candidate vs SCN-DB-POOL-001 in Baseline). Aggregate differences are only reported on the intersection of successfully run scenarios.
+3.  **Variance Buffer**: For live hosted provider runs, a $\pm 5\%$ threshold variance buffer is applied to semantic or confidence scores to prevent blocking on provider non-determinism.
+
+---
+
+## 11. Reproducibility & Secret Exposure Controls
+
+### Reproducibility Configuration Snapshotting
+The framework serializes a snapshot of the runtime configuration:
+*   Requested temperature, provider/model settings, prompt versions, graph budgets, retrieval parameters, embedding settings, Git commit hash, and evaluation runner version.
+*   *Note*: Temperature `0.0` does not guarantee deterministic output from hosted providers.
+
+### Secret Exposure Scanning
+The runner implements deterministic credential scans on execution traces, manifests, and failure logs:
+1.  **Value Scanning**: Scans for exact values of configured environment keys (e.g. `GROQ_API_KEY`, `GEMINI_API_KEY`).
+2.  **Pattern Scanning**: Regex matches for authentication headers (`Bearer ...`), Portkey credentials, or classic token structures.
+3.  **Sanitization Check**: Verifies that exception handlers successfully stripped raw tokens from `FailureTerminalState` error messages.
 
 ---
 
 ## 12. Quality & Regression Gates
 
-The project establishes a clear release criteria boundary:
+Initial Phase 9 release gates focus on implementation correctness rather than arbitrary quality thresholds.
 
-| Metric Group | Metric Name | Gate Condition | Release Policy |
-|---|---|---|---|
-| **Hard Gates** | Citation Validity | `100%` | Block release on failure |
-| **Hard Gates** | Schema Validity | `100%` | Block release on failure |
-| **Hard Gates** | Budget Compliance | `100%` | Block release on failure |
-| **Hard Gates** | Secret Exposure | `0 leaks` | Block release on failure |
-| **Soft Quality** | Root Cause Accuracy | $\ge 90\%$ | Warn / Review required |
-| **Soft Quality** | Evidence Recall | $\ge 85\%$ | Warn / Review required |
-| **Soft Quality** | Tool Precision | $\ge 80\%$ | Warn / Review required |
+### Hard Gates (Block Release)
+*   **Schema Validity**: `100%` of output files must comply with Pydantic expectations.
+*   **Budget Compliance**: `0` runs may violate configured iteration/tool budgets.
+*   **Secret Safety**: `0` scanned credentials or tokens may appear in results.
+*   **Invalid Citation Rate**: `0%` of cited IDs may be completely missing from telemetry database options.
+
+### Soft / Informational Metrics (Non-Blocking)
+*   Root Cause Accuracy.
+*   Evidence Recall.
+*   Tool Selection Precision.
+*   *Threshold Introduction Policy*: Hard quality thresholds (e.g., Recall $\ge 85\%$) will only be set after executing Baseline Experiments on at least 15 development benchmark scenarios to establish statistical variance.
 
 ---
 
 ## 13. Proposed File Structure
 
-Following repository conventions, Phase 9 will implement the following lightweight directory tree:
+To prevent code fragmentation, the initial framework is consolidated into four cohesive modules:
 
 ```text
 evals/
 ├── __init__.py
-├── runner.py              # CLI scenario executor
-├── schemas.py             # Evaluation state & report structures
-├── metrics/
-│   ├── __init__.py
-│   ├── citations.py       # Citation precision & recall
-│   ├── evidence.py        # Evidence ID matching & category validations
-│   ├── rca.py             # Service localization & remediation score
-│   └── efficiency.py      # Budget utilization & latency trackers
-├── datasets/
-│   └── loader.py          # Scenario Repository loader wrappers
-└── reporting/
-    ├── aggregator.py      # Aggregates scores across runs
-    └── markdown.py        # Markdown report generator
-
-tests/
-└── unit/
-    ├── test_eval_metrics.py    # Unit tests for scoring logic
-    └── test_eval_runner.py     # Unit tests for runner flows
+├── schemas.py             # EvaluationTrace and GoldenCase Pydantic structures
+├── metrics.py             # Deterministic and semantic scoring functions
+├── runner.py              # Scenario loader and execution loops
+└── reporting.py           # Markdown aggregator and regression comparator
 ```
 
 ---
 
-## 14. Dependency Decision
+## 14. CI Strategy
 
-*   **Existing Dependencies Reused**: `pydantic`, `pandas`, `pytest`.
-*   **Ragas / DeepEval Decision**: **Do Not Adopt**. Ragas introduces heavy external dependencies, requires internet connectivity, and has installation issues under Python 3.14 on Windows.
-*   **Recommendation**: Implement a custom, lightweight, deterministic metric library. Custom python scoring ensures zero overhead, 100% offline predictability, fast execution, and strict OS/runtime compatibility.
-
----
-
-## 15. Cost and Performance Controls
-
-*   **Offline Mocking by Default**: All evaluations run against offline repository mocks without calling hosted API endpoints.
-*   **Max Live Scenarios Cap**: Live evaluation runs are capped at `10` incidents max to prevent runaway token costs.
-*   **No Parallelism Overload**: Concurrent evaluation requests are executed sequentially or in small throttled batches to satisfy Groq/Gemini TPM rate limits.
+*   **Current State**: CI integration is planned but not currently implemented (no GitHub actions exist).
+*   **PR Staging Plan**:
+    *   *PR Verification*: Runs only fast deterministic metric unit tests and smoke scenarios (fully offline-safe, zero provider keys required).
+    *   *Main Branch Merge*: Runs the full offline benchmark suite.
+    *   *Scheduled Runs*: Nightly live provider evaluation (requires hosted credentials; run within a secure, isolated runner).
 
 ---
 
-## 16. Risks and Mitigations
+## 15. Risks and Mitigations
 
 *   **Benchmark Overfitting**:
-    *   *Risk*: Prompt templates or routing rules are modified to pass the database pool scenario specifically, losing generalization.
-    *   *Mitigation*: Introduce diverse scenario categories (e.g. latency degradation, dependency failures) and partition splits (`dev` vs `test`).
-*   **Hosted Provider Non-Determinism**:
-    *   *Risk*: Model API updates alter responses at temperature `0.0`.
-    *   *Mitigation*: Maintain regression gates with a slight accuracy tolerance margin while keeping schema and citation checks at `100%`.
+    *   *Mitigation*: Partition scenarios into distinct `dev`, `validation`, and `test` splits. Frozen test scenarios are run only before major releases.
+*   **Answer Leakage**:
+    *   *Mitigation*: Review golden files to ensure telemetry logs do not explicitly state the root cause code, and verify tool outputs do not print raw answers.
+*   **Stale Golden Labels**:
+    *   *Mitigation*: Unit tests validate that all scenario datasets conform to the active telemetry and context builder schemas.
+*   **Composite Score Bias**:
+    *   *Mitigation*: Report metrics independently rather than compiling a single arbitrary weighted score.
 
 ---
 
-## 17. Implementation Milestones
+## 16. Implementation Milestones
 
-1.  **Milestone 1 — Evaluation Schemas**: Define scenario results and runner settings Pydantic models.
-2.  **Milestone 2 — Deterministic Metrics**: Implement citation, evidence coverage, and budget efficiency scorers.
-3.  **Milestone 3 — Semantic Scoring**: Implement service localization and remediation matching.
-4.  **Milestone 4 — Scenario Runner**: Write `runner.py` with arguments and mock execution modes.
-5.  **Milestone 5 — Aggregation & Reporting**: Write markdown and JSON results serialization.
-6.  **Milestone 6 — Integration Tests**: Verify the runner using pytest.
+1.  **Milestone 1 — Evaluation Contracts**: Define evaluation state schemas and trace models.
+2.  **Milestone 2 — Deterministic Metrics**: Implement citation, evidence coverage, and budget trackers.
+3.  **Milestone 3 — Structured RCA Metrics**: Implement service localization and remediation matching.
+4.  **Milestone 4 — Tool & Critic Metrics**: Build path-independent tool precision and critic accuracy evaluators.
+5.  **Milestone 5 — Offline Runner**: Implement the execution loop supporting `mock-graph` and `offline-component` modes.
+6.  **Milestone 6 — Aggregation & Reporting**: Write markdown results aggregator and paired regression rules.
+7.  **Milestone 7 — Baseline Experiments**: Run comparative baselines and write `DATA/scenarios/definitions/` updates.
