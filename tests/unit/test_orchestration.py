@@ -1100,7 +1100,7 @@ def test_failure_routing_all_nodes(mock_gateway, mock_retriever, tool_registry, 
     try:
         state = {"incident": incident, "investigation_id": "INV-FAIL-5"}
         result = graph.invoke(state)
-        assert result.get("termination_reason") is None
+        assert result.get("termination_reason") == "Finalization failure"
         assert result["failure"].failure_type == "FINALIZE_RCA_FAILURE"
     finally:
         nodes_logger.info = original_info
@@ -1137,6 +1137,37 @@ def test_failure_routing_all_nodes(mock_gateway, mock_retriever, tool_registry, 
         assert "not present in the service topology" in result["failure"].error_message
     finally:
         tool.run = original_run
+
+    # 7. Human review escalation failure
+    def mock_logging_human(msg, *args, **kwargs):
+        if "Investigation escalated to human review" in msg:
+            raise RuntimeError("Logging crash in human review")
+        original_info(msg, *args, **kwargs)
+    nodes_logger.info = mock_logging_human
+
+    mock_gateway.generate.side_effect = lambda request: ValidatedModelResponse(
+        response_id="1",
+        task_type=request.task_type,
+        raw_content="{}",
+        parsed_response=(rca_res if request.task_type == "rca" else CriticDecisionResponse(
+            response_id="C-2",
+            task_type="critic",
+            is_valid=True,
+            decision="HUMAN_REVIEW",
+            confidence_score=0.9
+        )),
+        execution_metadata=make_metadata(request.task_type)
+    )
+    nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+    graph = create_investigation_graph(nodes).compile()
+
+    try:
+        state = {"incident": incident, "investigation_id": "INV-FAIL-7"}
+        result = graph.invoke(state)
+        assert result["termination_reason"] == "Human review escalation failure"
+        assert result["failure"].failure_type == "HUMAN_REVIEW_FAILURE"
+    finally:
+        nodes_logger.info = original_info
 
 def test_terminal_nodes_reacheability(mock_gateway, mock_retriever, tool_registry, topology, incident):
     rca_res = RCADecisionResponse(
