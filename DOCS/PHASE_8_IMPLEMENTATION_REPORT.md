@@ -106,7 +106,7 @@ All 20 orchestration-specific unit and integration tests passed successfully.
 
 *   `[x]` Bounded LangGraph StateGraph implementation validated.
 *   `[x]` Try-except wrappers added to all nodes in `nodes.py`.
-*   `[x]` Complete failure propagation to `failure` node verified.
+*   `[x]` Complete deterministic failure propagation verified, including dedicated failure-node routing for non-terminal nodes and failed END states for terminal-node exceptions.
 *   `[x]` Counter verification test cases written.
 *   `[x]` Permanent gateway exception handling traced.
 *   `[x]` Documentation in `PROJECT_CONTEXT/ORCHESTRATION_ARCHITECTURE.md` updated.
