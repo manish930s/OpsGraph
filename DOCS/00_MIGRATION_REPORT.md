@@ -1,9 +1,9 @@
 # OpsGraph AI — Phase 7 Final Migration Report
-**Document Status:** Phase 7 Verification and Release Gate Complete  
-**Phase:** Phase 7 — Prompt Assembly, Guardrails, and Provider-Agnostic LLM Gateway  
-**Execution Date:** 2026-07-09  
-**Python Runtime:** CPython 3.14.0 (Windows)  
-**Live Verification Status:** PASSED — Groq and Gemini Successfully Verified  
+**Release Status:** RELEASED — v0.7.0
+**Phase:** Phase 7 — Prompt Assembly, Guardrails, and Provider-Agnostic LLM Gateway
+**Execution Date:** 2026-07-09
+**Python Runtime:** CPython 3.14.0 (Windows)
+**Live Verification Status:** PASSED — Groq and Gemini Successfully Verified
 
 ---
 
@@ -15,13 +15,14 @@ Phase 7 delivers the first controlled model execution layer in OpsGraph AI. It p
 **Full live-enabled suite**: 98 collected, **98 passed**, 0 failed, 0 skipped.
 **Groq live smoke test**: **PASSED** (2.73s, using `llama-3.3-70b-versatile`).
 **Gemini live smoke test**: **PASSED** (8.05s, using `gemini-2.5-flash`).  
-**Merge status**: **UNBLOCKED** — both live Groq and Gemini generation successfully verified.
+**Merge status**: **COMPLETED** — merged into main.
+**Tag status**: **PUBLISHED** — v0.7.0.
 
 ---
 
 ## 2. Repository State
 
-- **Active Branch**: `feature/phase-7-prompt-guardrails-gateway`
+- **Historical Release Branch**: `feature/phase-7-prompt-guardrails-gateway`
 - **Working Tree State**: Clean — no uncommitted modifications (after tracking conftest and embedding safety files)
 - **Python Runtime**: CPython 3.14.0 (Windows x64)
 
@@ -232,15 +233,9 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 
 ---
 
-## 17. Phase 8 Bounded Orchestration Boundary
-
-Phase 8 (LangGraph Investigation Engine) must implement a bounded, deterministic state graph.
-
----
-
 ## 18. Exit Checklist
 
-- `[x]` Active branch: `feature/phase-7-prompt-guardrails-gateway`
+- `[x]` Historical release branch: `feature/phase-7-prompt-guardrails-gateway`
 - `[x]` `.env` verified ignored by git
 - `[x]` `.env.*` variants ignored; `.env.example` tracked
 - `[x]` No API key values in any source file, test, or documentation
@@ -255,15 +250,14 @@ Phase 8 (LangGraph Investigation Engine) must implement a bounded, deterministic
 - `[x]` Test summary wording is mathematically correct
 - `[x]` Technical debt section covers real operational limitations
 - `[x]` NeMo status remains truthful (deferred, not active)
-- `[x]` Phase 8 bounded orchestration — LangGraph StateGraph, nodes, and conditional edges implemented
 - `[x]` requirements.txt updated with `groq` and `google-genai`
 - `[x]` Live tests fixed: single-provider smoke tests disable fallback
-- `[x]` Default suite: **110 passed, 2 skipped, 0 failed (offline) / 112 passed (live)**
+- `[x]` Default suite: **96 passed, 2 skipped, 0 failed (offline) / 98 passed (live)**
 - `[x]` Groq live smoke test: **PASSED**
 - `[x]` Gemini live smoke test: **PASSED** (using `gemini-2.5-flash`)
 - `[x]` Feature branch pushed to `origin/feature/phase-7-prompt-guardrails-gateway`
-- `[x]` Merge into main — **UNBLOCKED**
-- `[x]` v0.7.0 tag — **UNBLOCKED**
+- `[x]` Merge into main — **COMPLETED**
+- `[x]` v0.7.0 tag — **PUBLISHED**
 
 ---
 
@@ -301,15 +295,4 @@ Ingestion only runs on the currently active embedding model (Gemini). The fallba
 The `LLMGateway` and its adapters do not import, invoke, or depend on the embedding generation services or Qdrant collection management.
 
 ### Release Gate Policy
-The project adheres to **Policy A (Strict Dual-Provider Release Gate)**: successful live execution from both Groq and Gemini providers is mandatory. Since the Gemini live smoke test has now successfully passed with the `gemini-2.5-flash` model, the release gate is fully met, and the release status is **UNBLOCKED / PASSED**. Merge into `main` and `v0.7.0` tagging are authorized.
-
----
-
-## 20. Phase 8 Bounded LangGraph Orchestration Details
-
-- **Implementation**: Created a stateful SRE workflow engine using LangGraph (`create_investigation_graph`).
-- **State Representation**: Strongly typed `InvestigationState` dictionary carrying incident records, execution metrics, current hypotheses, and terminal state indicators.
-- **Enforced Boundaries**: Implemented configurations in `app/config.py` defining hard budget limits (`INVESTIGATION_MAX_ITERATIONS` = 3, `INVESTIGATION_MAX_TOOL_CALLS` = 6, `INVESTIGATION_MAX_CONTEXT_REBUILDS` = 3).
-- **Tool Allowlist & Strict Typing**: Restricts executions to registry allowed tools, validating parameter schemas strictly using `args_model` Pydantic models.
-- **Escalation**: Gracefully routes to human review terminal state (`HumanReviewTerminalState`) or graph failure state (`FailureTerminalState`) when budgets are exhausted or verification checks fail.
-- **Unit Verification**: 9 new boundedness and execution path tests passing successfully (`tests/unit/test_orchestration.py`).
+The project adheres to **Policy A (Strict Dual-Provider Release Gate)**: successful live execution from both Groq and Gemini providers is mandatory. Since the Gemini live smoke test has now successfully passed with the `gemini-2.5-flash` model, the release gate is fully met, and the release status is **COMPLETED / PUBLISHED**. Merge into `main` and `v0.7.0` tagging are authorized.
