@@ -1,7 +1,9 @@
 # OpsGraph AI — Phase 8 Bounded LangGraph Investigation Report
 
-**Document Status:** Phase 8 Implementation & Verification Complete  
-**Phase:** Phase 8 — Bounded LangGraph Investigation Engine  
+**Release Status:** RELEASED — v0.8.0
+**Merge Commit:** eef9690f30dc0037dcbafbb190a018c25d6f4d0c
+**Tag:** v0.8.0
+**Phase:** Phase 8 — Bounded LangGraph Investigation Engine
 **Execution Date:** 2026-07-10  
 **Python Runtime:** CPython 3.14.0 (Windows)  
 **Verification Status:** PASSED — 116 offline unit tests successfully passed  
