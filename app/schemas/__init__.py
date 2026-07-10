@@ -87,8 +87,12 @@ __all__ = [
     "CriticDecisionResponse",
     "LLMExecutionMetadata",
     "ValidatedModelResponse",
+    "ToolSelectionDecision",
+    "HumanReviewTerminalState",
+    "FailureTerminalState",
 ]
 
 from app.schemas.prompting import Message, ModelRequest
 from app.schemas.model_response import RCADecisionResponse, CriticDecisionResponse, LLMExecutionMetadata, ValidatedModelResponse
+from app.schemas.orchestration import ToolSelectionDecision, HumanReviewTerminalState, FailureTerminalState
 

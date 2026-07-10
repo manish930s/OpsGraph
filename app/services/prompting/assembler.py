@@ -14,7 +14,11 @@ class PromptAssembler:
         context: InvestigationContext,
         task_type: str,
         prompt_version: str = "v1",
-        budget_limit_words: int = 15000
+        budget_limit_words: int = 15000,
+        draft_rca: str | None = None,
+        critic_findings: str | None = None,
+        critic_suggestions: str | None = None,
+        allowed_tools_schemas: str | None = None
     ) -> ModelRequest:
         if not context:
             raise ContextValidationError("InvestigationContext is required.")
@@ -25,6 +29,8 @@ class PromptAssembler:
             user_template_id = "investigation"
         elif task_type == "critic":
             user_template_id = "critic"
+        elif task_type == "tool_selection":
+            user_template_id = "tool_selection"
         else:
             raise ContextValidationError(f"Unsupported task type for prompt assembly: '{task_type}'")
 
@@ -97,11 +103,18 @@ class PromptAssembler:
                     context_knowledge_content=knowledge_content,
                     context_gaps_content=gaps_content
                 )
+            elif task_type == "tool_selection":
+                user_message = user_template.format(
+                    current_rca=draft_rca or "",
+                    critic_findings=critic_findings or "",
+                    critic_suggestions=critic_suggestions or "",
+                    allowed_tools_schemas=allowed_tools_schemas or ""
+                )
             else:
                 # critic template accepts draft_rca
                 # We can pass it in metadata if needed, but here we provide a standard template format
                 user_message = user_template.format(
-                    draft_rca=context.execution_metadata.model_dump_json() # fallback mock or placeholder
+                    draft_rca=draft_rca or context.execution_metadata.model_dump_json() # fallback mock or placeholder
                 )
         except KeyError as e:
             raise ContextValidationError(f"Prompt template formatting failed due to missing key: {str(e)}")
