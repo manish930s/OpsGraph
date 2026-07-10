@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 from app.config import settings
+from app.common.exceptions import ValidationError
 from app.schemas.incident import IncidentRecord
 from app.schemas.evidence import Evidence
 from app.schemas.telemetry import ServiceTopology
@@ -11,6 +12,7 @@ from app.schemas.orchestration import (
 )
 from app.services.orchestration.state import InvestigationState
 from app.services.evidence.normalizer import EvidenceNormalizer
+from app.services.evidence.validator import validate_evidence as val_evidence
 from app.services.evidence.packager import EvidencePackager
 from app.services.context.builder import ContextBuilder
 from app.services.prompting.assembler import PromptAssembler
@@ -172,10 +174,22 @@ class WorkflowNodes:
             }
 
     def identify_evidence_gap(self, state: InvestigationState) -> dict[str, Any]:
-        critic = state.get("critic_decision")
-        gaps = critic.evidence_gaps if critic else ()
-        logger.info(f"Critic identified evidence gaps: {gaps}")
-        return {}
+        logger.info("Identifying evidence gaps.")
+        try:
+            critic = state.get("critic_decision")
+            gaps = critic.evidence_gaps if critic else ()
+            logger.info(f"Critic identified evidence gaps: {gaps}")
+            return {}
+        except Exception as e:
+            logger.error(f"Identify evidence gap failure: {str(e)}")
+            incident = state.get("incident")
+            return {
+                "failure": FailureTerminalState(
+                    incident_id=incident.incident_id if incident else "UNKNOWN",
+                    failure_type="IDENTIFY_EVIDENCE_GAP_FAILURE",
+                    error_message=f"Identify evidence gap failure: {str(e)}"
+                )
+            }
 
     def select_tool(self, state: InvestigationState) -> dict[str, Any]:
         logger.info("Selecting next diagnostic tool to execute.")
@@ -297,11 +311,29 @@ class WorkflowNodes:
                 logger.warning(f"No specific normalizer for tool: {selection.tool_name}")
                 new_evidences = []
 
-            # Filter evidence count limit
+            # Filter evidence count limit and enforce deterministic policies
             current_evidence = list(state.get("evidence_list", []))
+            
+            if len(current_evidence) >= settings.INVESTIGATION_MAX_EVIDENCE_ITEMS:
+                raise ValidationError("Evidence cap reached; no more evidence can be added.")
+                
+            if len(current_evidence) + len(new_evidences) > settings.INVESTIGATION_MAX_EVIDENCE_ITEMS:
+                raise ValidationError(
+                    f"Adding batch of {len(new_evidences)} would exceed max evidence items limit of {settings.INVESTIGATION_MAX_EVIDENCE_ITEMS}."
+                )
+
+            existing_ids = {ev.evidence_id for ev in current_evidence}
+            batch_ids = set()
             for ev in new_evidences:
-                if len(current_evidence) < settings.INVESTIGATION_MAX_EVIDENCE_ITEMS:
-                    current_evidence.append(ev)
+                # Validate single item constraints
+                val_evidence(ev, incident, self.topology)
+                
+                # Check for duplicate IDs within the batch itself (intra-batch)
+                if ev.evidence_id in batch_ids:
+                    raise ValidationError(f"Duplicate evidence ID detected in batch: {ev.evidence_id}")
+                batch_ids.add(ev.evidence_id)
+                
+                current_evidence.append(ev)
 
             return {
                 "evidence_list": current_evidence,
@@ -319,7 +351,18 @@ class WorkflowNodes:
 
     def validate_evidence(self, state: InvestigationState) -> dict[str, Any]:
         logger.info("Validating new evidence.")
-        return {}
+        try:
+            return {}
+        except Exception as e:
+            logger.error(f"Validate evidence node failure: {str(e)}")
+            incident = state.get("incident")
+            return {
+                "failure": FailureTerminalState(
+                    incident_id=incident.incident_id if incident else "UNKNOWN",
+                    failure_type="VALIDATE_EVIDENCE_FAILURE",
+                    error_message=f"Validate evidence node failure: {str(e)}"
+                )
+            }
 
     def rebuild_context(self, state: InvestigationState) -> dict[str, Any]:
         logger.info("Rebuilding investigation context.")
@@ -353,40 +396,65 @@ class WorkflowNodes:
             }
 
     def finalize_rca(self, state: InvestigationState) -> dict[str, Any]:
-        logger.info("Finalizing successful RCA.")
-        return {"termination_reason": "RCA accepted by critic"}
+        try:
+            logger.info("Finalizing successful RCA.")
+            return {"termination_reason": "RCA accepted by critic"}
+        except Exception as e:
+            logger.error(f"Finalize RCA failure: {str(e)}")
+            incident = state.get("incident")
+            return {
+                "failure": FailureTerminalState(
+                    incident_id=incident.incident_id if incident else "UNKNOWN",
+                    failure_type="FINALIZE_RCA_FAILURE",
+                    error_message=f"Finalize RCA failure: {str(e)}"
+                )
+            }
 
     def human_review(self, state: InvestigationState) -> dict[str, Any]:
-        logger.info("Investigation escalated to human review.")
-        incident = state["incident"]
-        critic = state.get("critic_decision")
-        gaps = critic.evidence_gaps if critic else ()
-        
-        escalation_reason = "Critic requested human review or iteration budget exhausted."
-        if state.get("iteration_count", 0) >= settings.INVESTIGATION_MAX_ITERATIONS:
-            escalation_reason = "Max investigation iteration limit reached."
-        elif state.get("tool_call_count", 0) >= settings.INVESTIGATION_MAX_TOOL_CALLS:
-            escalation_reason = "Max tool call budget exhausted."
-        elif state.get("context_rebuild_count", 0) >= settings.INVESTIGATION_MAX_CONTEXT_REBUILDS:
-            escalation_reason = "Max context rebuild budget reached."
+        try:
+            logger.info("Investigation escalated to human review.")
+            incident = state["incident"]
+            critic = state.get("critic_decision")
+            gaps = critic.evidence_gaps if critic else ()
+            
+            escalation_reason = "Critic requested human review or iteration budget exhausted."
+            if state.get("iteration_count", 0) >= settings.INVESTIGATION_MAX_ITERATIONS:
+                escalation_reason = "Max investigation iteration limit reached."
+            elif state.get("tool_call_count", 0) >= settings.INVESTIGATION_MAX_TOOL_CALLS:
+                escalation_reason = "Max tool call budget exhausted."
+            elif state.get("context_rebuild_count", 0) >= settings.INVESTIGATION_MAX_CONTEXT_REBUILDS:
+                escalation_reason = "Max context rebuild budget reached."
 
-        review = HumanReviewTerminalState(
-            incident_id=incident.incident_id,
-            investigation_id=state.get("investigation_id"),
-            current_rca=state.get("current_rca"),
-            critic_decision=critic,
-            gaps=tuple(gaps),
-            reason=escalation_reason,
-            recommended_actions=critic.suggestions if critic else (),
-            iteration_count=state.get("iteration_count", 0),
-            tool_call_count=state.get("tool_call_count", 0),
-            context_rebuild_count=state.get("context_rebuild_count", 0)
-        )
-        return {
-            "termination_reason": "Escalated to human review",
-            "human_review": review
-        }
+            review = HumanReviewTerminalState(
+                incident_id=incident.incident_id,
+                investigation_id=state.get("investigation_id"),
+                current_rca=state.get("current_rca"),
+                critic_decision=critic,
+                gaps=tuple(gaps),
+                reason=escalation_reason,
+                recommended_actions=critic.suggestions if critic else (),
+                iteration_count=state.get("iteration_count", 0),
+                tool_call_count=state.get("tool_call_count", 0),
+                context_rebuild_count=state.get("context_rebuild_count", 0)
+            )
+            return {
+                "termination_reason": "Escalated to human review",
+                "human_review": review
+            }
+        except Exception as e:
+            logger.error(f"Human review node failure: {str(e)}")
+            return {
+                "failure": FailureTerminalState(
+                    incident_id=state.get("incident").incident_id if state.get("incident") else "UNKNOWN",
+                    failure_type="HUMAN_REVIEW_FAILURE",
+                    error_message=f"Human review node failure: {str(e)}"
+                )
+            }
 
     def failure(self, state: InvestigationState) -> dict[str, Any]:
-        logger.info("Investigation encountered a fatal graph failure.")
-        return {"termination_reason": "Investigation failure"}
+        try:
+            logger.info("Investigation encountered a fatal graph failure.")
+            return {"termination_reason": "Investigation failure"}
+        except Exception as e:
+            logger.error(f"Failure node itself failed: {str(e)}")
+            return {"termination_reason": "Investigation failure"}

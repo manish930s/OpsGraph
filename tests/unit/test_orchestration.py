@@ -791,7 +791,405 @@ def test_evidence_cap_enforcement(mock_gateway, mock_retriever, tool_registry, t
         state = {"incident": incident, "investigation_id": "INV-013"}
         result = graph.invoke(state)
 
-        assert result["termination_reason"] == "RCA accepted by critic"
-        assert len(result["evidence_list"]) == 2  # capped at 2, even if tool returned more
+        assert result["termination_reason"] == "Investigation failure"
+        assert result["failure"].failure_type == "TOOL_EXECUTION_FAILURE"
+        assert "exceed max evidence items limit" in result["failure"].error_message
     finally:
         settings.INVESTIGATION_MAX_EVIDENCE_ITEMS = original_cap
+
+def test_boundary_iteration_calls(mock_gateway, mock_retriever, tool_registry, topology, incident):
+    rca_res = RCADecisionResponse(
+        response_id="R-1",
+        task_type="rca",
+        summary="Draft",
+        observations=(),
+        hypotheses=(),
+        recommended_next_steps=()
+    )
+    critic_res = CriticDecisionResponse(
+        response_id="C-1",
+        task_type="critic",
+        is_valid=False,
+        decision="CONTINUE_INVESTIGATION",
+        confidence_score=0.4,
+        evidence_gaps=("log",)
+    )
+    tool_selection_res = ToolSelectionDecision(
+        response_id="S-1",
+        task_type="tool_selection",
+        tool_name="log_pattern_search",
+        reason="Query logs",
+        parameters={},
+        expected_evidence_type="log"
+    )
+
+    mock_gateway.generate.side_effect = lambda request: ValidatedModelResponse(
+        response_id="1",
+        task_type=request.task_type,
+        raw_content="{}",
+        parsed_response=(rca_res if request.task_type == "rca" else (critic_res if request.task_type == "critic" else tool_selection_res)),
+        execution_metadata=make_metadata(request.task_type)
+    )
+
+    original_max_iters = settings.INVESTIGATION_MAX_ITERATIONS
+    settings.INVESTIGATION_MAX_ITERATIONS = 3
+
+    try:
+        nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+        graph = create_investigation_graph(nodes).compile()
+
+        state = {"incident": incident, "investigation_id": "INV-LIMIT-ITER"}
+        result = graph.invoke(state)
+
+        assert result["termination_reason"] == "Escalated to human review"
+        assert result["iteration_count"] == 3
+        
+        # Count actual calls to generate for task_type == "rca"
+        rca_calls = [c for c in mock_gateway.generate.call_args_list if c[0][0].task_type == "rca"]
+        assert len(rca_calls) == 3
+    finally:
+        settings.INVESTIGATION_MAX_ITERATIONS = original_max_iters
+
+def test_boundary_tool_calls(mock_gateway, mock_retriever, tool_registry, topology, incident):
+    rca_res = RCADecisionResponse(
+        response_id="R-1",
+        task_type="rca",
+        summary="Draft",
+        observations=(),
+        hypotheses=(),
+        recommended_next_steps=()
+    )
+    critic_res = CriticDecisionResponse(
+        response_id="C-1",
+        task_type="critic",
+        is_valid=False,
+        decision="CONTINUE_INVESTIGATION",
+        confidence_score=0.4,
+        evidence_gaps=("log",)
+    )
+    tool_selection_res = ToolSelectionDecision(
+        response_id="S-1",
+        task_type="tool_selection",
+        tool_name="log_pattern_search",
+        reason="Query logs",
+        parameters={},
+        expected_evidence_type="log"
+    )
+
+    mock_gateway.generate.side_effect = lambda request: ValidatedModelResponse(
+        response_id="1",
+        task_type=request.task_type,
+        raw_content="{}",
+        parsed_response=(rca_res if request.task_type == "rca" else (critic_res if request.task_type == "critic" else tool_selection_res)),
+        execution_metadata=make_metadata(request.task_type)
+    )
+
+    tool = tool_registry.get_tool("log_pattern_search")
+    original_run = tool.run
+    tool_run_mock = MagicMock(side_effect=original_run)
+    tool.run = tool_run_mock
+
+    original_max_tools = settings.INVESTIGATION_MAX_TOOL_CALLS
+    settings.INVESTIGATION_MAX_TOOL_CALLS = 2
+
+    try:
+        nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+        graph = create_investigation_graph(nodes).compile()
+
+        state = {"incident": incident, "investigation_id": "INV-LIMIT-TOOL"}
+        result = graph.invoke(state)
+
+        assert result["termination_reason"] == "Escalated to human review"
+        assert result["tool_call_count"] == 2
+        assert tool_run_mock.call_count == 2
+    finally:
+        settings.INVESTIGATION_MAX_TOOL_CALLS = original_max_tools
+        tool.run = original_run
+
+def test_boundary_context_rebuild_calls(mock_gateway, mock_retriever, tool_registry, topology, incident):
+    rca_res = RCADecisionResponse(
+        response_id="R-1",
+        task_type="rca",
+        summary="Draft",
+        observations=(),
+        hypotheses=(),
+        recommended_next_steps=()
+    )
+    critic_res = CriticDecisionResponse(
+        response_id="C-1",
+        task_type="critic",
+        is_valid=False,
+        decision="CONTINUE_INVESTIGATION",
+        confidence_score=0.4,
+        evidence_gaps=("log",)
+    )
+    tool_selection_res = ToolSelectionDecision(
+        response_id="S-1",
+        task_type="tool_selection",
+        tool_name="log_pattern_search",
+        reason="Query logs",
+        parameters={},
+        expected_evidence_type="log"
+    )
+
+    mock_gateway.generate.side_effect = lambda request: ValidatedModelResponse(
+        response_id="1",
+        task_type=request.task_type,
+        raw_content="{}",
+        parsed_response=(rca_res if request.task_type == "rca" else (critic_res if request.task_type == "critic" else tool_selection_res)),
+        execution_metadata=make_metadata(request.task_type)
+    )
+
+    original_max_rebuilds = settings.INVESTIGATION_MAX_CONTEXT_REBUILDS
+    settings.INVESTIGATION_MAX_CONTEXT_REBUILDS = 2
+
+    try:
+        nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+        original_rebuild = nodes.rebuild_context
+        rebuild_mock = MagicMock(side_effect=original_rebuild)
+        nodes.rebuild_context = rebuild_mock
+
+        graph = create_investigation_graph(nodes).compile()
+
+        state = {"incident": incident, "investigation_id": "INV-LIMIT-REBUILD"}
+        result = graph.invoke(state)
+
+        assert result["termination_reason"] == "Escalated to human review"
+        assert result["context_rebuild_count"] == 2
+        assert rebuild_mock.call_count == 2
+    finally:
+        settings.INVESTIGATION_MAX_CONTEXT_REBUILDS = original_max_rebuilds
+
+def test_failure_routing_all_nodes(mock_gateway, mock_retriever, tool_registry, topology, incident):
+    # 1. Context build failure
+    mock_retriever.retrieve.side_effect = RuntimeError("Retrieval database offline")
+    nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+    graph = create_investigation_graph(nodes).compile()
+    
+    state = {"incident": incident, "investigation_id": "INV-FAIL-1"}
+    result = graph.invoke(state)
+    assert result["termination_reason"] == "Investigation failure"
+    assert result["failure"].failure_type == "CONTEXT_BUILD_FAILURE"
+    assert "Retrieval database offline" in result["failure"].error_message
+
+    # Reset retrieve mock
+    mock_retriever.retrieve.side_effect = None
+
+    # 2. Gateway failure during hypothesis generation
+    mock_gateway.generate.side_effect = RuntimeError("Gateway timeout")
+    nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+    graph = create_investigation_graph(nodes).compile()
+
+    state = {"incident": incident, "investigation_id": "INV-FAIL-2"}
+    result = graph.invoke(state)
+    assert result["termination_reason"] == "Investigation failure"
+    assert result["failure"].failure_type == "GATEWAY_FAILURE"
+    
+    # 3. Gateway failure during critic evaluation
+    rca_res = RCADecisionResponse(
+        response_id="R-1",
+        task_type="rca",
+        summary="Draft",
+        observations=(),
+        hypotheses=(),
+        recommended_next_steps=()
+    )
+    def gateway_critic_fail_side_effect(request):
+        if request.task_type == "critic":
+            raise RuntimeError("Critic model overloaded")
+        return ValidatedModelResponse(
+            response_id="1",
+            task_type=request.task_type,
+            raw_content="{}",
+            parsed_response=rca_res,
+            execution_metadata=make_metadata(request.task_type)
+        )
+    mock_gateway.generate.side_effect = gateway_critic_fail_side_effect
+    nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+    graph = create_investigation_graph(nodes).compile()
+
+    state = {"incident": incident, "investigation_id": "INV-FAIL-3"}
+    result = graph.invoke(state)
+    assert result["termination_reason"] == "Investigation failure"
+    assert result["failure"].failure_type == "GATEWAY_FAILURE"
+
+    # 4. Context rebuild failure
+    critic_res = CriticDecisionResponse(
+        response_id="C-1",
+        task_type="critic",
+        is_valid=False,
+        decision="CONTINUE_INVESTIGATION",
+        confidence_score=0.4,
+        evidence_gaps=("log",)
+    )
+    tool_selection_res = ToolSelectionDecision(
+        response_id="S-1",
+        task_type="tool_selection",
+        tool_name="log_pattern_search",
+        reason="Query logs",
+        parameters={},
+        expected_evidence_type="log"
+    )
+    def gateway_rebuild_fail_side_effect(request):
+        return ValidatedModelResponse(
+            response_id="1",
+            task_type=request.task_type,
+            raw_content="{}",
+            parsed_response=(rca_res if request.task_type == "rca" else (critic_res if request.task_type == "critic" else tool_selection_res)),
+            execution_metadata=make_metadata(request.task_type)
+        )
+    mock_gateway.generate.side_effect = gateway_rebuild_fail_side_effect
+    
+    retrievals = 0
+    def retrieve_fail_on_rebuild(*args, **kwargs):
+        nonlocal retrievals
+        retrievals += 1
+        if retrievals > 1:
+            raise RuntimeError("Retriever offline on rebuild")
+        from app.schemas.knowledge import KnowledgeBundle, RetrievalExecutionMetadata
+        meta = RetrievalExecutionMetadata(
+            vector_store_mode="memory",
+            embedding_mode="mock",
+            reranker_mode="flashrank",
+            degraded_mode=False
+        )
+        return KnowledgeBundle(
+            chunks=tuple(),
+            applied_filters={},
+            evidence_references=tuple(),
+            search_summary="none",
+            execution_metadata=meta
+        )
+    mock_retriever.retrieve.side_effect = retrieve_fail_on_rebuild
+    nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+    graph = create_investigation_graph(nodes).compile()
+
+    state = {"incident": incident, "investigation_id": "INV-FAIL-4"}
+    result = graph.invoke(state)
+    assert result["termination_reason"] == "Investigation failure"
+    assert result["failure"].failure_type == "CONTEXT_REBUILD_FAILURE"
+
+    # Reset retrieve mock
+    mock_retriever.retrieve.side_effect = None
+
+    # 5. Finalization failure
+    from app.services.orchestration.nodes import logger as nodes_logger
+    original_info = nodes_logger.info
+    def mock_logging(msg, *args, **kwargs):
+        if "Finalizing successful RCA" in msg:
+            raise RuntimeError("Logging crash")
+        original_info(msg, *args, **kwargs)
+    nodes_logger.info = mock_logging
+
+    mock_gateway.generate.side_effect = lambda request: ValidatedModelResponse(
+        response_id="1",
+        task_type=request.task_type,
+        raw_content="{}",
+        parsed_response=(rca_res if request.task_type == "rca" else CriticDecisionResponse(
+            response_id="C-2",
+            task_type="critic",
+            is_valid=True,
+            decision="ACCEPT",
+            confidence_score=0.9
+        )),
+        execution_metadata=make_metadata(request.task_type)
+    )
+    nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+    graph = create_investigation_graph(nodes).compile()
+
+    try:
+        state = {"incident": incident, "investigation_id": "INV-FAIL-5"}
+        result = graph.invoke(state)
+        assert result.get("termination_reason") is None
+        assert result["failure"].failure_type == "FINALIZE_RCA_FAILURE"
+    finally:
+        nodes_logger.info = original_info
+
+    # 6. Evidence validation failure (invalid service not in topology)
+    from app.tools.log_tool import LogSearchResponse
+    from app.schemas.telemetry import LogRecord, EnvironmentName
+    tool = tool_registry.get_tool("log_pattern_search")
+    original_run = tool.run
+    fake_log = LogRecord(
+        timestamp="2026-01-15T14:00:00Z",
+        log_id="L-1",
+        service="nonexistent-service",
+        environment=EnvironmentName.PRODUCTION_SIM,
+        instance_id="inst-1",
+        level="ERROR",
+        logger="syslog",
+        message="Database connection timeout",
+        template_id="temp-1",
+        scenario_id="SCN-DB-POOL-001"
+    )
+    tool.run = MagicMock(return_value=LogSearchResponse(
+        logs=[fake_log]
+    ))
+    mock_gateway.generate.side_effect = gateway_rebuild_fail_side_effect
+    nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+    graph = create_investigation_graph(nodes).compile()
+
+    try:
+        state = {"incident": incident, "investigation_id": "INV-FAIL-6"}
+        result = graph.invoke(state)
+        assert result["termination_reason"] == "Investigation failure"
+        assert result["failure"].failure_type == "TOOL_EXECUTION_FAILURE"
+        assert "not present in the service topology" in result["failure"].error_message
+    finally:
+        tool.run = original_run
+
+def test_terminal_nodes_reacheability(mock_gateway, mock_retriever, tool_registry, topology, incident):
+    rca_res = RCADecisionResponse(
+        response_id="R-1",
+        task_type="rca",
+        summary="Draft",
+        observations=(),
+        hypotheses=(),
+        recommended_next_steps=()
+    )
+    critic_res_accept = CriticDecisionResponse(
+        response_id="C-1",
+        task_type="critic",
+        is_valid=True,
+        findings=(),
+        suggestions=(),
+        decision="ACCEPT",
+        confidence_score=0.9
+    )
+    mock_gateway.generate.side_effect = lambda request: ValidatedModelResponse(
+        response_id="1",
+        task_type=request.task_type,
+        raw_content="{}",
+        parsed_response=(rca_res if request.task_type == "rca" else critic_res_accept),
+        execution_metadata=make_metadata(request.task_type)
+    )
+
+    nodes = WorkflowNodes(mock_gateway, mock_retriever, tool_registry, topology)
+    nodes.select_tool = MagicMock(side_effect=nodes.select_tool)
+    nodes.execute_tool = MagicMock(side_effect=nodes.execute_tool)
+    nodes.human_review = MagicMock(side_effect=nodes.human_review)
+    nodes.failure = MagicMock(side_effect=nodes.failure)
+
+    graph = create_investigation_graph(nodes).compile()
+    state = {"incident": incident, "investigation_id": "INV-TERM-1"}
+    result = graph.invoke(state)
+
+    assert result["termination_reason"] == "RCA accepted by critic"
+    assert nodes.select_tool.call_count == 0
+    assert nodes.execute_tool.call_count == 0
+    assert nodes.human_review.call_count == 0
+    assert nodes.failure.call_count == 0
+
+def test_no_arbitrary_routing(incident):
+    from pydantic import ValidationError
+    # Assert that an unsupported critic decision cannot even be instantiated
+    with pytest.raises(ValidationError):
+        CriticDecisionResponse(
+            response_id="C-1",
+            task_type="critic",
+            is_valid=True,
+            findings=(),
+            suggestions=(),
+            decision="GOTO_FINAL_NODE_DIRECTLY",
+            confidence_score=0.9
+        )

@@ -31,6 +31,16 @@ def route_after_tool_execution(state: InvestigationState) -> str:
         return "failure"
     return "validate_evidence"
 
+def route_after_evidence_gap(state: InvestigationState) -> str:
+    if state.get("failure") is not None:
+        return "failure"
+    return "select_tool"
+
+def route_after_evidence_validation(state: InvestigationState) -> str:
+    if state.get("failure") is not None:
+        return "failure"
+    return "rebuild_context"
+
 def route_after_rebuild(state: InvestigationState) -> str:
     if state.get("failure") is not None:
         return "failure"
@@ -96,7 +106,14 @@ def create_investigation_graph(nodes: WorkflowNodes) -> StateGraph:
         }
     )
 
-    workflow.add_edge("identify_evidence_gap", "select_tool")
+    workflow.add_conditional_edges(
+        "identify_evidence_gap",
+        route_after_evidence_gap,
+        {
+            "failure": "failure",
+            "select_tool": "select_tool"
+        }
+    )
 
     workflow.add_conditional_edges(
         "select_tool",
@@ -116,7 +133,14 @@ def create_investigation_graph(nodes: WorkflowNodes) -> StateGraph:
         }
     )
 
-    workflow.add_edge("validate_evidence", "rebuild_context")
+    workflow.add_conditional_edges(
+        "validate_evidence",
+        route_after_evidence_validation,
+        {
+            "failure": "failure",
+            "rebuild_context": "rebuild_context"
+        }
+    )
 
     workflow.add_conditional_edges(
         "rebuild_context",

@@ -202,11 +202,11 @@ ValidatedModelResponse  [typed response + LLMExecutionMetadata]
 
 | Metric | Count (Offline Mode) | Count (Live-Enabled Mode) |
 | :--- | :--- | :--- |
-| Collected | 107 | 107 |
-| Passed | 105 | 107 |
+| Collected | 98 | 98 |
+| Passed | 96 | 98 |
 | Failed | 0 | 0 |
 | Skipped | 2 (integration live tests) | 0 |
-| Warnings | 3 | 3 |
+| Warnings | 2 | 2 |
 
 ---
 
