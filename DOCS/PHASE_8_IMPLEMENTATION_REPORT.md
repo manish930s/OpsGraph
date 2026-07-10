@@ -1,7 +1,9 @@
 # OpsGraph AI — Phase 8 Bounded LangGraph Investigation Report
 
-**Document Status:** Phase 8 Implementation & Verification Complete  
-**Phase:** Phase 8 — Bounded LangGraph Investigation Engine  
+**Release Status:** RELEASED — v0.8.0
+**Merge Commit:** eef9690f30dc0037dcbafbb190a018c25d6f4d0c
+**Tag:** v0.8.0
+**Phase:** Phase 8 — Bounded LangGraph Investigation Engine
 **Execution Date:** 2026-07-10  
 **Python Runtime:** CPython 3.14.0 (Windows)  
 **Verification Status:** PASSED — 116 offline unit tests successfully passed  
@@ -74,7 +76,7 @@ To avoid silent data corruption and maintain context size constraints, a single 
 
 *   **Gateway Retries**: Transient errors (429, timeout, 503) are retried with exponential backoff inside `LLMGateway`.
 *   **Permanent Failures**: Retries exhausted, authentication failure (401/403), or invalid API configurations raise a `GatewayError` immediately.
-*   **Secret Safety**: Exception blocks catch `GatewayError` and extract only generic error descriptions. API keys or environment secrets are guaranteed to never be exposed in `FailureTerminalState` payloads.
+*   **Secret Safety**: Exception blocks catch `GatewayError` and extract only generic error descriptions. Gateway exception handling sanitizes known provider failures before populating `FailureTerminalState` payloads and avoids intentionally including API keys, authentication headers, or environment secret values.
 
 ---
 

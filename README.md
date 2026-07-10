@@ -1,189 +1,184 @@
-# Enterprise Agentic RAG (Scalable Pipeline)
+# OpsGraph AI
 
-A production-grade, enterprise-level RAG system built with **LangGraph**, **Portkey LLM Gateway**, and **Gemini Embeddings**. The system distinguishes between technical "True Data" and random "Noisy Data" using semantic re-ranking, history-aware planning, and NeMo Guardrails for input/output safety.
+OpsGraph AI is a bounded, evidence-grounded investigation engine for SRE incident analysis and root-cause reasoning. The project combines:
 
-## Key Features
+*   **Structured Telemetry Access**: Controlled read-only queries against system metrics, logs, traces, topology, and deployments.
+*   **Evidence Grounding & Validation**: Provenance checks and schema validation for diagnostic discoveries.
+*   **Hybrid Operational Knowledge Retrieval**: Dual-path retrieval using semantic vector search and lexical fallback search.
+*   **Deterministic Context Construction**: Context compilation with strict token budgets and reranking.
+*   **Provider-Agnostic LLM Execution**: Decoupled gateway layer with retries and single-transition fallback.
+*   **Deterministic Guardrails**: Hard constraints on input prompts and structured JSON outputs.
+*   **Bounded LangGraph Orchestration**: State-graph orchestration limiting loop depths and resource consumption.
+*   **Explicit Terminal States**: Predictable exit paths for root-cause analysis (RCA) finalization, human escalation, and fatal failures.
 
-- **Agentic Intelligence**: LangGraph for cyclic reasoning, multi-step planning, and conversation memory.
-- **Guardrails**: NeMo Guardrails gate blocks off-topic, jailbreak, and injection inputs before any retrieval.
-- **LLM Gateway**: Portkey routes all LLM calls with automatic fallback between primary and backup Groq keys.
-- **Enterprise Search**: Qdrant Cloud for high-performance vector search + FlashRank for local semantic reranking.
-- **Gemini Embeddings**: Google `gemini-embedding-2-preview` (3072-dim) via `langchain-google-genai`.
-- **Local Document Parsing**: PDF, HTML, TXT, DOCX, PPTX parsed entirely on-device — no external OCR service.
-- **Observability**: Full trace nesting with **Pydantic Logfire** and **LangSmith** across every agent node.
-- **Evaluation Suite**: RAGAS-powered eval pipeline (6 metrics) with a dedicated Streamlit demo app.
+> [!NOTE]
+> OpsGraph AI is an experimental developer scaffold designed to investigate engineering controls for model-driven SRE troubleshooting. It is not an autonomous replacement for production human operations.
 
 ---
 
-## High-Level Architecture & Roadmap
+## 1. Problem Statement
 
-The OpsGraph AI system is divided into modular phases. Below is the technical dataflow and implementation status:
+Modern incident resolution requires SREs to manually correlate diverse data sources—including telemetry metrics, logs, distributed traces, system topology, deployment records, runbooks, and historical incident post-mortems. This manual analysis introduces delay and increases Mean Time to Resolution (MTTR).
+
+OpsGraph AI structures this process as a bounded, deterministic investigation workflow. The system collects telemetry evidence, validates data provenance, builds token-budgeted context, generates root-cause hypotheses, and subjects them to critic evaluation. It enforces strict computational budgets at every step, safely finalizing the analysis, requesting human review when stuck, or terminating cleanly on failure.
+
+---
+
+## 2. System Architecture Overview
+
+The diagram below represents the sequential telemetry ingestion, validation, gateway, and orchestration topology:
 
 ```mermaid
 graph TD
-    Incident[📋 Incident and Telemetry] -->|Ingested| Repos[🗄️ Telemetry Repositories]
-    Repos -->|Traced| Tools[🛠️ Investigation Tools]
-    Tools -->|Analyzed| Grounding[🔍 Evidence Grounding]
-    Grounding -->|Contextualized| Knowledge[📚 Knowledge Layer]
-    Knowledge -->|Constructed| ContextBuilder[🧩 Context Builder]
-    ContextBuilder -->|Assembled| Prompt[✉️ Prompt Assembly + Guardrails + Gateway]
-    Prompt -->|Orchestrated| Engine[🤖 LangGraph Investigation Engine]
-    Engine -->|Served| API[⚡ API]
-    API -->|Rendered| UI[🖥️ UI]
-
-    classDef implemented fill:#2ecc71,stroke:#27ae60,color:#fff;
-    classDef planned fill:#3498db,stroke:#2980b9,color:#fff;
-    
-    class Repos,Tools,Grounding,Knowledge,ContextBuilder,Prompt implemented;
-    class Engine,API,UI planned;
-```
-
-### Phase Roadmap Status
-*   **Phase 1**: Foundations & Schemas — **[IMPLEMENTED]**
-*   **Phase 2**: Telemetry Repository Layer — **[IMPLEMENTED]**
-*   **Phase 3**: Investigation Tool Layer — **[IMPLEMENTED]**
-*   **Phase 4**: Evidence Grounding Layer — **[IMPLEMENTED]**
-*   **Phase 5**: Enterprise Knowledge Layer (RAG) — **[IMPLEMENTED & STABILIZED]**
-*   **Phase 6**: Context Builder — **[IMPLEMENTED]**
-*   **Phase 7**: Prompt Assembly + NeMo Guardrails + LLM Gateway — **[IMPLEMENTED]**
-*   **Phase 8**: LangGraph Investigation Engine — **[PLANNED]**
-*   **Phase 9**: FastAPI — **[PLANNED]**
-*   **Phase 10**: Streamlit UI — **[PLANNED]**
-*   **Phase 11**: Evaluation + Docker + Portfolio Release — **[PLANNED]**
-
----
-
-## Project Structure
-
-```text
-├── app/
-│   ├── agents/
-│   │   └── nodes/       # Planner, Retriever, Responder LangGraph nodes
-│   ├── gateway/         # Portkey LLM gateway — primary + fallback Groq routing
-│   ├── guardrails/      # NeMo Guardrails input/output filtering
-│   ├── ingestion/
-│   │   ├── chunking/    # Paragraph-based text splitter (1500 char max)
-│   │   └── loaders/     # Local parsers — PDF (pypdf), HTML, TXT, DOCX, PPTX
-│   ├── services/
-│   │   └── retrieval/   # Gemini embeddings + Qdrant search + FlashRank reranking
-│   ├── config.py        # Centralized environment variable management
-│   └── main.py          # FastAPI entrypoint — guardrails gate + /query endpoint
-├── evals/               # RAGAS evaluation suite + Streamlit 3-tab demo
-├── ui/                  # Streamlit chat interface with reasoning step transparency
-├── processed_data/      # Auto-generated — parsed & chunked JSON output per document
-├── docs/                # Architectural and operational guides (11 docs)
-├── DATA/                # Sample datasets (True vs Noisy documentation)
-└── requirements.txt     # Pinned dependencies
+    Incident[📋 Incident Record] --> Repos[🗄️ Telemetry Repositories]
+    Repos --> Tools[🛠️ Investigation Tools]
+    Tools --> Evidence[🔍 Evidence Grounding & Validation]
+    Evidence --> Knowledge[📚 Knowledge Layer & Retrieval]
+    Knowledge --> Context[🧩 Deterministic Context Builder]
+    Context --> Prompt[✉️ Prompt Assembly & Guards]
+    Prompt --> Gateway[🔌 Provider-Agnostic LLM Gateway]
+    Gateway --> Orchestrator[🤖 Bounded LangGraph Orchestration Engine]
+    Orchestrator --> Finalize[RCA / Human Review / Failure]
 ```
 
 ---
 
-## Tech Stack
+## 3. Project Roadmap and Phase Status
 
-| Layer | Technology |
-|-------|-----------|
-| Orchestration | LangChain + LangGraph |
-| LLMs | Groq (Llama 3.3 70B) via **Portkey** gateway |
-| Guardrails | NeMo Guardrails |
-| Vector DB | Qdrant Cloud |
-| Reranking | FlashRank (local, zero-latency) |
-| Embeddings | Gemini `gemini-embedding-2-preview` (3072-dim) |
-| Document Parsing | pypdf + pdfplumber (local, no OCR service) |
-| Observability | Pydantic Logfire + LangSmith |
-| Evaluation | RAGAS + custom Tool Correctness (Jaccard) |
+*   **Phase 1 — Foundations and Schemas**: Core telemetry data schemas and incident definitions. **[RELEASED]**
+*   **Phase 2 — Telemetry Repository Layer**: In-memory query repositories for logs, metrics, traces, and topology. **[RELEASED]**
+*   **Phase 3 — Investigation Tools**: Diagnostic tool wrappers with Pydantic argument boundaries. **[RELEASED]**
+*   **Phase 4 — Evidence Grounding and Validation**: Proof validation and source-of-truth grounding. **[RELEASED]**
+*   **Phase 5 — Enterprise Knowledge Layer**: Hybrid Qdrant and SentenceTransformers operational knowledge store. **[RELEASED]**
+*   **Phase 6 — Deterministic Context Builder**: Latency budgeting and FlashRank re-ranking compilation. **[RELEASED]**
+*   **Phase 7 — Prompt Assembly & LLM Gateway**: Custom templates, input/output guards, and SDK gateways. **[RELEASED — v0.7.0]**
+*   **Phase 8 — Bounded LangGraph Orchestration**: Stateful SRE orchestration loop. **[RELEASED — v0.8.0]**
+*   **Phase 9 — Planned / Not Started**
 
 ---
 
-## Getting Started
+## 4. Phase 8 Capabilities and Execution Boundaries
 
-### 1. Install dependencies
+The LangGraph investigation engine enforces strict runtime budgets to guarantee termination:
 
+*   **State Representation**: Typed `InvestigationState` tracking diagnostic histories and iteration limits.
+*   **Budget Limits**:
+    *   *Maximum Investigation Iterations*: 3
+    *   *Maximum Diagnostic Tool Calls*: 6
+    *   *Maximum Context Rebuilds*: 3
+    *   *Maximum Stored Evidence Items*: 100
+*   **Critic Logic**: An automated evaluation step comparing confidence against a target threshold (0.80).
+*   **Deterministic Routing**: Allowlisted state transitions to prevent arbitrary node navigation.
+*   **Tool Execution Constraints**: All diagnostic tools must pass parameter validation against strict Pydantic schemas.
+*   **Exception & Failure Contracts**:
+    *   *Non-Terminal Node Failure*: Exceptions in intermediate nodes populate a failure payload and transition via conditional edges to the `failure` node -> `END`.
+    *   *Terminal Node Exception*: Exceptions in terminal nodes (`finalize_rca`, `human_review`) catch errors, retain the failure payload, set a failed `termination_reason`, and transition directly to `END` without traversing the `failure` node.
+
+---
+
+## 5. LLM Gateway & Embedding Architecture
+
+### LLM Gateway Routing
+Model generation tasks are decoupled behind the custom `LLMGateway`. Nodes do not invoke provider SDKs directly.
+*   **Primary Provider**: Groq (`llama-3.3-70b-versatile`)
+*   **Backup Fallback**: Gemini (`gemini-2.5-flash`)
+*   **Resiliency**: Gateway retries transient errors (429 rate limits, connection timeouts) with exponential backoff. If retries are exhausted, it switches to the backup provider. Permanent errors raise `GatewayError` immediately and exit safely without exposing credentials.
+
+### Embedding Architecture
+Knowledge indexing and query embedding are separated from generation configurations:
+*   **Primary Embedding Model**: Gemini `models/gemini-embedding-2-preview` (3072 dimensions)
+*   **Local Fallback Model**: SentenceTransformers `all-mpnet-base-v2` (768 dimensions)
+*   **Vector Isolation (Strategy A)**: Dual vector collections are maintained in Qdrant based on dimension matching to prevent vector corruption.
+*   **Operational Limitation**: The local fallback collection remains empty at runtime unless local fallback indexing has been executed separately.
+
+---
+
+## 6. Installation and Setup
+
+Setup instructions for Windows PowerShell:
+
+### 1. Clone & Initialize Environment
 ```powershell
-python -m venv tenvv
-.\tenvv\Scripts\activate
+# Clone the repository
+git clone https://github.com/manish930s/OpsGraph.git
+cd opsgraph-ai
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+.\venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Configure environment
-
-Create a `.env` file with the following keys:
-
+### 2. Configure Settings
+Copy `.env.example` to `.env` and populate credentials (use placeholders only; do not commit keys):
 ```env
-# Groq Reasoning Engine (Llama 3.3)
-GROQ_API_KEY = ""
-GROQ_FALLBACK_API_KEY = ""          # second Groq key, or same as primary
-
-# Portkey LLM Gateway
-PORTKEY_API_KEY = ""
-
-# Qdrant Vector DB
-QDRANT_API_KEY = ""
-QDRANT_CLUSTER_ENDPOINT = ""        # e.g. https://your-cluster.cloud.qdrant.io:6333
-
-# Pydantic Logfire Observability
-LOGFIRE_TOKEN = ""
-
-# LangSmith
-LANGSMITH_TRACING = true
-LANGSMITH_ENDPOINT = https://api.smith.langchain.com
-LANGSMITH_API_KEY = ""
-LANGSMITH_PROJECT = ""
-
-# Streamlit UI → FastAPI
-BACKEND_URL = ""                    # e.g. http://localhost:8000
-
-# Eval judge LLM (keep separate from main key to avoid rate-limiting the live app)
-JUDGE_GROQ = ""
-
-# Gemini Embeddings
-GEMINI_API_KEY = ""
-```
-
-### 3. Run data ingestion
-
-Parses all documents in `DATA/`, chunks them, saves metadata to `processed_data/`, and indexes vectors into Qdrant.
-
-```powershell
-python -m app.ingestion.processor DATA --wipe
-```
-
-> Pass `--wipe` to drop and recreate the Qdrant collection. Omit it to append to an existing collection.
-
-### 4. Launch the app
-
-```powershell
-# Terminal 1 — FastAPI backend
-uvicorn app.main:app --reload --port 8000
-
-# Terminal 2 — Streamlit UI
-streamlit run ui/app.py
-```
-
-### 5. Run the eval suite (optional)
-
-```powershell
-# Requires the FastAPI backend running on :8000
-streamlit run evals/app.py
+GROQ_API_KEY="your-groq-key"
+GEMINI_API_KEY="your-gemini-key"
+QDRANT_URL="https://your-qdrant-instance"
+QDRANT_API_KEY="your-qdrant-key"
 ```
 
 ---
 
-## Documentation Index
+## 7. Verification and Testing
 
-| # | Guide | What it covers |
-|---|-------|---------------|
-| 01 | [System Overview](docs/01_SYSTEM_OVERVIEW.md) | High-level vision and end-to-end flow |
-| 02 | [Ingestion Engine](docs/02_INGESTION_ENGINE.md) | Document parsing and indexing pipeline |
-| 03 | [Node Intelligence](docs/03_NODE_INTELLIGENCE.md) | Planner, Retriever, Responder internals |
-| 04 | [Observability](docs/04_TRACING_AND_OBSERVABILITY.md) | Logfire + LangSmith tracing |
-| 05 | [Environment Variables](docs/05_ENVIRONMENT_VARIABLES.md) | All env vars and configuration reference |
-| 06 | [Known Gotchas](docs/06_KNOWN_GOTCHAS.md) | Non-obvious bugs and architectural decisions |
-| 07 | [FlashRank Reranking](docs/07_FLASHRANK_RERANKING.md) | Local semantic reranker deep-dive |
-| 08 | [Guardrails](docs/08_GUARDRAILS.md) | NeMo Guardrails implementation |
-| 09 | [LLM Gateway](docs/09_LLM_GATEWAY.md) | Portkey routing, fallback, and observability |
-| 10 | [Evals](docs/10_EVALS.md) | RAGAS metrics theory and token budget |
-| 11 | [Evals Pipeline](docs/11_EVALS_PIPELINE.md) | Live eval pipeline and Streamlit demo |
+Verify the workspace using the offline test suite. The default test suite is offline-safe. Live provider integration tests are skipped unless explicitly enabled.
+
+### Run Full Offline Suite
+```powershell
+.\venv\Scripts\python.exe -m pytest
+```
+*v0.8.0 Release Verification Baseline:*
+*   **Collected**: 118
+*   **Passed**: 116
+*   **Failed**: 0
+*   **Skipped**: 2 (integration live provider smoke tests)
+
+### Run Orchestration Suite
+```powershell
+.\venv\Scripts\python.exe -m pytest tests/unit/test_orchestration.py -v
+```
+*v0.8.0 Release Verification Baseline:*
+*   **Passed**: 20
 
 ---
 
-*Built for High-Scale Enterprise Document Intelligence.*
+## 8. Repository Structure
+
+*   `app/schemas/`: Pydantic telemetry models and structured gateway definitions.
+*   `app/services/context/`: ContextBuilder and FlashRank re-ranking logic.
+*   `app/services/evidence/`: Evidence schema validation and deduplication services.
+*   `app/services/retrieval/`: Vector retrieval adapters and Strategy A collection managers.
+*   `app/services/gateway/`: Decoupled `LLMGateway` retries and provider mapping.
+*   `app/services/guardrails/`: Input/Output validation facade rules.
+*   `app/services/orchestration/`: LangGraph StateGraph, nodes, and conditional edges.
+*   `app/tools/`: Telemetry connectors (metrics, logs, traces, topology, windowing).
+*   `prompts/`: Versioned RCA prompts and tool selection templates.
+*   `DATA/`: Sample incident data and grounding records.
+*   `DOCS/`: Release reports and historical migration documentation.
+*   `PROJECT_CONTEXT/`: Deep-dive architectural references.
+*   `tests/`: Unit and integration test suites.
+
+---
+
+## 9. Engineering Controls and Constraints
+
+*   **Bounded Loops**: State machine execution limits prevent infinite loop execution.
+*   **Allowlisted Tools**: Unrestricted discovery is blocked; tool registry enforces an execution boundary.
+*   **Shell Isolation**: The system executes structured telemetry functions; no arbitrary shell executions are permitted.
+*   **Input and Output Constraints**: Prompts use system tags to isolate untrusted user data, and outputs must parse to exact Pydantic model schemas.
+*   **Secret Safety**: Node error handlers intercept exceptions and strip raw API keys or connection tokens before logging `FailureTerminalState` payloads.
+
+---
+
+## 10. Known Limitations
+
+*   **NeMo Guardrails**: Currently deferred because of Windows compatibility and Python 3.14 lifecycle constraints.
+*   **Fallback Collection**: Embedding fallback requires separate local index population.
+*   **Token Budgeting**: Approximate budget enforcement uses word counts rather than model BPE tokenizers.
+*   **Metadata Gaps**: Token usage counts are not captured by custom provider adapters.
+*   **Production Readiness**: No public web API or GUI is implemented. Evaluation relies on command-line pytest execution.
