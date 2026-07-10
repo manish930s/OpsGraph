@@ -403,6 +403,7 @@ class WorkflowNodes:
             logger.error(f"Finalize RCA failure: {str(e)}")
             incident = state.get("incident")
             return {
+                "termination_reason": "Finalization failure",
                 "failure": FailureTerminalState(
                     incident_id=incident.incident_id if incident else "UNKNOWN",
                     failure_type="FINALIZE_RCA_FAILURE",
@@ -444,6 +445,7 @@ class WorkflowNodes:
         except Exception as e:
             logger.error(f"Human review node failure: {str(e)}")
             return {
+                "termination_reason": "Human review escalation failure",
                 "failure": FailureTerminalState(
                     incident_id=state.get("incident").incident_id if state.get("incident") else "UNKNOWN",
                     failure_type="HUMAN_REVIEW_FAILURE",

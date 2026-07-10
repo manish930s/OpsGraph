@@ -14,7 +14,7 @@ Phase 8 implements a strongly-typed, bounded, and deterministic orchestration en
 
 Highlights of this release include:
 *   **Bounded Iterations**: Rigid limits on iterations (3), tool calls (6), context rebuilds (3), and evidence items (100) to prevent infinite loops and runaway API costs.
-*   **Comprehensive Failure Coverage**: Complete try-except wrappers on every single node (including terminal nodes) converting errors to state-held failures and routing them to the `failure` node.
+*   **Comprehensive Failure Coverage**: Complete try-except wrappers on every single node (including terminal nodes) converting errors to state-held failures and routing them to the `failure` node (or transitioning directly to `END` for terminal nodes).
 *   **Exact Counter Semantics**: Verified tracking of iterations, tool executions, and context rebuilds, with corresponding unit tests counting invocations.
 *   **Deterministic Validation Policy**: Complete rejection of invalid evidence batches, intra-batch duplicate IDs, and cap-exceeding payloads.
 *   **No Arbitrary Routing**: Hardcoded allowlists in conditional edges to prevent model decisions from triggering arbitrary nodes.
@@ -39,7 +39,7 @@ Highlights of this release include:
 
 All node executions in the graph conform to **Category A** exception handling:
 *   **Category A**: The node wraps its entire logic in a try-except block. Any raised exception is caught, logged, and converted into a `FailureTerminalState` containing diagnostic details (excluding any secrets).
-*   **Conditional Edge Enforcement**: Every single state transition checks `if state.get("failure") is not None` and immediately routes the graph execution to the `failure` node.
+*   **Conditional Edge Enforcement**: For non-terminal nodes, every state transition checks `if state.get("failure") is not None` and immediately routes the graph execution to the `failure` node. Terminal nodes (`finalize_rca`, `human_review`) catch exceptions and transition directly to `END` via static edges (retaining the failure payload and setting a failed `termination_reason`).
 
 | Node Name | Success Target(s) | Exception Behavior Category | Failure Target |
 |---|---|---|---|

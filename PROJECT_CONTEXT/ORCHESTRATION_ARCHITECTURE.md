@@ -62,7 +62,8 @@ Every node in the orchestration layer follows a strict try-catch boundary. Unhan
 | `human_review` | `END` | A: Caught & converted to `FailureTerminalState` | `END` (sets failure payload) |
 | `failure` | `END` | A: Logged & returned | `END` |
 
-* **Category A**: The node catches any exception internally, writes a `FailureTerminalState` payload into the state, and returns. Conditional routing inspects this and transitions to the `failure` node.
+* **Category A (Non-Terminal Nodes)**: The node catches any exception internally, writes a `FailureTerminalState` payload into the state, and returns. Conditional routing inspects this and transitions to the `failure` node.
+* **Category A (Terminal Nodes - `finalize_rca`, `human_review`)**: The node catches any exception internally, writes a `FailureTerminalState` payload into the state, sets a failed `termination_reason` (e.g. `"Finalization failure"` or `"Human review escalation failure"`), and transitions directly to `END` via static edges (does not traverse the `failure` node).
 
 ## 3. Graph State Schema
 
