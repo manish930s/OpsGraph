@@ -126,7 +126,7 @@ QDRANT_API_KEY="your-qdrant-key"
 
 ## 7. Verification and Testing
 
-Verify the workspace using the offline test suite. All tests execute using mock provider adapter modes.
+Verify the workspace using the offline test suite. The default test suite is offline-safe. Live provider integration tests are skipped unless explicitly enabled.
 
 ### Run Full Offline Suite
 ```powershell
@@ -152,7 +152,7 @@ Verify the workspace using the offline test suite. All tests execute using mock 
 *   `app/schemas/`: Pydantic telemetry models and structured gateway definitions.
 *   `app/services/context/`: ContextBuilder and FlashRank re-ranking logic.
 *   `app/services/evidence/`: Evidence schema validation and deduplication services.
-*   `app/services/retrieval/`: Vector retrieval adapters and Strategry A collection managers.
+*   `app/services/retrieval/`: Vector retrieval adapters and Strategy A collection managers.
 *   `app/services/gateway/`: Decoupled `LLMGateway` retries and provider mapping.
 *   `app/services/guardrails/`: Input/Output validation facade rules.
 *   `app/services/orchestration/`: LangGraph StateGraph, nodes, and conditional edges.
