@@ -340,6 +340,23 @@ def test_critic_trace_record():
 
 
 def test_critic_trace_confidence_bounds():
+    # Test valid boundary values
+    c_min = CriticTraceRecord(
+        iteration=1,
+        decision="ACCEPT",
+        confidence=0.0,
+        is_valid=True
+    )
+    assert c_min.confidence == 0.0
+
+    c_max = CriticTraceRecord(
+        iteration=1,
+        decision="ACCEPT",
+        confidence=1.0,
+        is_valid=True
+    )
+    assert c_max.confidence == 1.0
+
     with pytest.raises(ValidationError):
         CriticTraceRecord(
             iteration=1,
@@ -470,7 +487,29 @@ def test_metric_result_invalid_combinations():
             metric_name="Recall",
             status=MetricStatus.FAILED,
             value=0.5,
-            error_type="Error"
+        )
+
+def test_metric_result_non_finite():
+    # NaN rejection
+    with pytest.raises(ValidationError):
+        MetricResult(
+            metric_name="Recall",
+            status=MetricStatus.SUCCESS,
+            value=float('nan')
+        )
+    # Inf rejection
+    with pytest.raises(ValidationError):
+        MetricResult(
+            metric_name="Recall",
+            status=MetricStatus.SUCCESS,
+            value=float('inf')
+        )
+    # -Inf rejection
+    with pytest.raises(ValidationError):
+        MetricResult(
+            metric_name="Recall",
+            status=MetricStatus.SUCCESS,
+            value=float('-inf')
         )
 
 

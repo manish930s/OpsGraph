@@ -240,6 +240,15 @@ class MetricResult(BaseModel):
     error_type: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("value")
+    @classmethod
+    def validate_finite_value(cls, v: float | None) -> float | None:
+        import math
+        if v is not None:
+            if not math.isfinite(v):
+                raise ValueError(f"Metric value must be a finite number, got {v}")
+        return v
+
     @model_validator(mode="after")
     def validate_status_rules(self) -> "MetricResult":
         if self.status == MetricStatus.SUCCESS:

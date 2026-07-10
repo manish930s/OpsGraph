@@ -17,8 +17,8 @@
 *   `tests/unit/test_evaluation_schemas.py`: Unit tests for evaluation schemas.
 
 #### Files Modified
-*   `evals/__init__.py`: Added imports for Phase 9 schema classes to expose them cleanly.
-*   `evals/metrics.py`: Wrapped `ragas` imports in `try...except ImportError` blocks to enable offline imports without `ragas` dependency.
+*   `evals/__init__.py`: Cleaned to import only Phase 9 schemas, decoupling them from legacy metric imports to prevent `ragas` dependency errors during offline import.
+*   `evals/metrics.py`: Reverted back to its original state (no longer contains `try...except ImportError` blocks) to keep legacy metrics unaltered.
 
 #### Contracts Implemented
 1.  **DatasetSplit**: Enum values: `dev`, `validation`, `test`.
@@ -37,21 +37,21 @@
 14. **ScenarioEvaluationResult**: Envelope containing aggregated results, trace details, warnings, and errors.
 
 #### Validation Invariants
-*   Acceptable terminal outcomes must contain the expected terminal outcome.
-*   All duplicate values are strictly rejected across lists (e.g. required evidence, acceptable terminal outcomes, tools, tags) to prevent malformed data.
-*   Conflicting tools categories are rejected (cannot overlap required/acceptable with forbidden).
-*   Negative bounds are blocked (e.g., negative duration, negative iteration counts, negative latency).
-*   Timing ordering is enforced (finished_at cannot be before started_at).
-*   Critic confidence must lie strictly between `0.0` and `1.0`.
-*   Metric status combinations are strictly validated (e.g., failed status cannot have a numeric value, success status must have a value).
+*   **Critic Confidence boundaries**: The trace schema strictly allows `0.0 <= confidence <= 1.0` (inclusive), matching the runtime `CriticDecisionResponse` boundaries, and rejects values outside this range.
+*   **Structured Secret Exclusion**: Dedicated credential fields (API keys, tokens, auth headers, full environment dumps) are structurally excluded from the run manifest. Runtime leakage scanning of arbitrary nested metadata is deferred to later milestones.
+*   **Duplicate Rejection Policy**: Rejects duplicate values across terminal outcomes, evidence IDs, required tools, acceptable tools, forbidden tools, tags, acceptable equivalent root-cause codes, forbidden unsupported cause codes, acceptable remediation codes, and scenario IDs in manifests.
+*   **Tool Overlap Policy**: Rejects overlaps between `required_tools` and `forbidden_tools`, and between `acceptable_tools` and `forbidden_tools`.
+*   **Timestamp Validation**: timing ordering is enforced (finished_at cannot be earlier than started_at) and negative duration is rejected. Unfinished timing records (finished_at = None) are supported.
+*   **Finite Numeric Metrics**: The `value` field in `MetricResult` must be a finite float (rejects `NaN` and positive/negative infinity).
+*   **Metric Result Invariants**: Validates that SUCCESS status must have a value and zero errors, NOT_APPLICABLE status must have a reason and no value, and FAILED status must have an error type/reason and no value.
 
 #### Targeted Test Results
 *   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_evaluation_schemas.py -v`
-*   **Collected**: 25
-*   **Passed**: 25
+*   **Collected**: 26
+*   **Passed**: 26
 *   **Failed**: 0
 *   **Warnings**: 0
-*   **Execution Time**: 2.33s
+*   **Execution Time**: 0.17s
 
 #### Full Offline Suite Results
 *   **Command**: `.\venv\Scripts\python.exe -m pytest`
@@ -67,7 +67,7 @@
 ## Known Limitations and Deferred Instrumentation
 *   Runtime node timings, sequence traversal logging, and critic trace logging must be instrumented in the runner/collector phase (Milestone 5/6).
 *   Ragas integration remains deferred due to lack of environment installation support.
-*   Credential safety scanning is defined in schemas but will be enforced at runtime by the future evaluation runner.
+*   Runtime secret safety scanning of arbitrary metadata is deferred to later safety milestones.
 *   No v0.9.0 release has been created.
 
 ---

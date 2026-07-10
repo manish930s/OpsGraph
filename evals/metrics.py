@@ -14,26 +14,16 @@ import pandas as pd
 from openai import AsyncOpenAI
 
 
-try:
-    from ragas.llms import llm_factory
-    from ragas.embeddings import HuggingFaceEmbeddings
-    from ragas import SingleTurnSample
-    from ragas.metrics.collections import (
-        Faithfulness,
-        AnswerRelevancy,
-        ContextPrecision,
-        ContextRecall,
-        AnswerCorrectness,
-    )
-except ImportError:
-    llm_factory = None
-    HuggingFaceEmbeddings = None
-    SingleTurnSample = None
-    Faithfulness = None
-    AnswerRelevancy = None
-    ContextPrecision = None
-    ContextRecall = None
-    AnswerCorrectness = None
+from ragas.llms import llm_factory
+from ragas.embeddings import HuggingFaceEmbeddings
+from ragas import SingleTurnSample
+from ragas.metrics.collections import (
+    Faithfulness,
+    AnswerRelevancy,
+    ContextPrecision,
+    ContextRecall,
+    AnswerCorrectness,
+)
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 JUDGE_MODEL = "llama-3.1-8b-instant"
