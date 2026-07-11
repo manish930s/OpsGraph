@@ -73,6 +73,9 @@ from evals.export import (
     export_dataset_result_json,
     export_benchmark_result_json,
 )
+from evals.html_reporter import (
+    export_html_report,
+)
 from evals.benchmark import (
     validate_benchmark,
     run_dataset,
