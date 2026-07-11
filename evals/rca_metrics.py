@@ -128,12 +128,22 @@ def evaluate_root_cause_code_correctness(
     """
     Compare predicted root-cause code against golden canonical code and equivalents.
     """
+    accepted_set = set()
     norm_expected = normalize_identifier(expected)
-    if norm_expected is None:
+    if norm_expected is not None:
+        accepted_set.add(norm_expected)
+
+    if acceptable_equivalents:
+        for eq in acceptable_equivalents:
+            norm_eq = normalize_identifier(eq)
+            if norm_eq is not None:
+                accepted_set.add(norm_eq)
+
+    if not accepted_set:
         return MetricResult(
             metric_name="Root-Cause Code Correctness",
             status=MetricStatus.NOT_APPLICABLE,
-            reason="No root-cause code expected in golden label."
+            reason="No root-cause code expectations defined in golden label."
         )
 
     norm_predicted = normalize_identifier(predicted)
@@ -145,7 +155,7 @@ def evaluate_root_cause_code_correctness(
             metadata={"prediction_missing": True, "match_type": "none"}
         )
 
-    if norm_predicted == norm_expected:
+    if norm_expected is not None and norm_predicted == norm_expected:
         return MetricResult(
             metric_name="Root-Cause Code Correctness",
             status=MetricStatus.SUCCESS,
@@ -153,16 +163,13 @@ def evaluate_root_cause_code_correctness(
             metadata={"prediction_missing": False, "match_type": "canonical"}
         )
 
-    # Check equivalents
-    if acceptable_equivalents:
-        norm_equivalents = {normalize_identifier(eq) for eq in acceptable_equivalents}
-        if norm_predicted in norm_equivalents:
-            return MetricResult(
-                metric_name="Root-Cause Code Correctness",
-                status=MetricStatus.SUCCESS,
-                value=1.0,
-                metadata={"prediction_missing": False, "match_type": "acceptable_equivalent"}
-            )
+    if norm_predicted in accepted_set:
+        return MetricResult(
+            metric_name="Root-Cause Code Correctness",
+            status=MetricStatus.SUCCESS,
+            value=1.0,
+            metadata={"prediction_missing": False, "match_type": "acceptable_equivalent"}
+        )
 
     return MetricResult(
         metric_name="Root-Cause Code Correctness",

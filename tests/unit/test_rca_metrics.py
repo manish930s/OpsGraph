@@ -249,3 +249,73 @@ def test_combined_evaluation_helper():
     # Verify JSON serialization of all metadata
     for key, metric in results.items():
         assert isinstance(json.dumps(metric.metadata), str)
+
+
+# --- 8. AUDIT AND NORMALIZATION POLICY TESTS ---
+
+def test_normalization_policy_cases():
+    # DB_POOL_EXHAUSTION matches db_pool_exhaustion (case-insensitive)
+    assert evaluate_root_cause_code_correctness("DB_POOL_EXHAUSTION", "db_pool_exhaustion").value == 1.0
+
+    # DB_POOL_EXHAUSTION does not match DB-POOL-EXHAUSTION
+    assert evaluate_root_cause_code_correctness("DB_POOL_EXHAUSTION", "DB-POOL-EXHAUSTION").value == 0.0
+
+    # payments-api does not match payments_api
+    assert evaluate_affected_service_correctness("payments-api", "payments_api").value == 0.0
+
+    # database does not match database-service
+    assert evaluate_affected_service_correctness("database", "database-service").value == 0.0
+
+    # pool exhaustion does not match connection pool exhaustion
+    assert evaluate_fault_category_correctness("pool exhaustion", "connection pool exhaustion").value == 0.0
+
+
+def test_root_cause_equivalence_sets():
+    # Case A: Canonical root_cause_code exists, equivalents exist
+    res = evaluate_root_cause_code_correctness(
+        "EQUIV_A", "CANONICAL", acceptable_equivalents=["equiv_a", "equiv_b"]
+    )
+    assert res.value == 1.0
+    assert res.metadata["match_type"] == "acceptable_equivalent"
+
+    # Case B: Canonical code is absent, but equivalents exist (equivalent-only expectation)
+    res_equiv_only = evaluate_root_cause_code_correctness(
+        "EQUIV_A", None, acceptable_equivalents=["equiv_a", "equiv_b"]
+    )
+    assert res_equiv_only.status == MetricStatus.SUCCESS
+    assert res_equiv_only.value == 1.0
+    assert res_equiv_only.metadata["match_type"] == "acceptable_equivalent"
+
+    # Case C: Both canonical and equivalent codes are absent
+    res_none = evaluate_root_cause_code_correctness("ANY", None, acceptable_equivalents=[])
+    assert res_none.status == MetricStatus.NOT_APPLICABLE
+
+
+def test_forbidden_cause_independence():
+    # Incorrect but non-forbidden code should score correctness = 0.0 and forbidden = 1.0
+    res_correctness = evaluate_root_cause_code_correctness("WRONG_CODE", "CANONICAL")
+    res_forbidden = evaluate_forbidden_unsupported_cause_detection("WRONG_CODE", ["FORBIDDEN_A"])
+
+    assert res_correctness.value == 0.0
+    assert res_forbidden.value == 1.0
+    assert res_forbidden.metadata["forbidden_match_detected"] is False
+
+
+def test_field_coverage_whitespace_only():
+    golden = {"affected_service": "checkout", "fault_category": "db"}
+    # Whitespace-only prediction treated as missing
+    pred = {"affected_service": "   ", "fault_category": "db"}
+    res = evaluate_structured_rca_field_coverage(pred, golden)
+    assert res.value == 0.5
+    assert res.metadata["expected_field_count"] == 2
+    assert res.metadata["present_field_count"] == 1
+
+
+def test_field_coverage_exclusion_from_denominator():
+    # Fields without golden expectations are excluded from denominator
+    golden = {"affected_service": "checkout"}
+    pred = {"affected_service": "checkout", "fault_category": "db", "root_cause_code": "code1"}
+    res = evaluate_structured_rca_field_coverage(pred, golden)
+    assert res.value == 1.0
+    assert res.metadata["expected_field_count"] == 1
+    assert res.metadata["present_field_count"] == 1
