@@ -168,6 +168,8 @@ Forbidden unsupported cause detection operates independently of correctness. An 
     *   *Rule*: Computes completeness across `affected_service`, `fault_category`, and `root_cause_code`. Whitespace-only values are treated as missing. Fields without golden expectations are excluded from denominator.
 6.  **Combined RCA Evaluator** (`evaluate_structured_rca`):
     *   *Rule*: Runs all 5 metrics and returns a dictionary of results. Aggregations (like averages or quality scores) are intentionally avoided, and individual `NOT_APPLICABLE` statuses are preserved independently.
+7.  **RCA Input Adapter** (`adapt_rca_decision_to_structured`):
+    *   *Rule*: Safely maps dictionary or Pydantic structures to structured rca inputs. Does not infer structured keys from natural language text.
 
 #### Targeted Test Results
 *   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_rca_metrics.py -v`
@@ -177,22 +179,90 @@ Forbidden unsupported cause detection operates independently of correctness. An 
 *   **Warnings**: 0
 *   **Execution Time**: 0.22s
 
-#### Regression Test Results
-*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_evaluation_schemas.py tests/unit/test_deterministic_metrics.py tests/unit/test_rca_metrics.py -v`
-*   **Collected**: 66
-*   **Passed**: 66
-*   **Failed**: 0
-*   **Warnings**: 0
-*   **Execution Time**: 0.32s
-
-#### Full Offline Suite Results
+#### Full Offline Suite Results (Milestone 3 Corrected Baseline)
 *   **Command**: `.\venv\Scripts\python.exe -m pytest`
-*   **Collected**: 182
+*   **Collected**: 184
 *   **Passed**: 182
 *   **Failed**: 0
 *   **Skipped**: 2
 *   **Warnings**: 3
-*   **Execution Time**: 24.12s
+*   **Execution Time**: 24.18s
+
+---
+
+### Milestone 4 — Tool-Selection Precision and Efficiency Metrics
+*   **Status**: Completed (2026-07-11)
+*   **Description**: Implemented pure, offline-capable tool metrics to evaluate tool use against scenario-level contracts.
+
+#### Files Added
+*   `evals/tool_metrics.py`: Tool metrics implementation file.
+*   `tests/unit/test_tool_metrics.py`: Focused unit tests for tool metrics.
+
+#### Files Modified
+*   `evals/__init__.py`: Exposed tool metrics and adapter helper in package exports.
+
+#### Tool Normalization Policy
+Tool names are normalized as follows:
+1.  Trim leading/trailing whitespace.
+2.  Convert to lowercase.
+3.  Preserves all internal characters and punctuation (underscores, dashes).
+No fuzzy matching, aliases, or substring matches are performed.
+
+#### Trace Parser Adapter and Attempted vs Successful Calls
+*   **Trace Adapter** (`extract_tool_names_from_trace`): Extracts tool names in order from a sequence of tool trace records (`ToolCallTraceRecord`), dicts, or strings.
+*   **Attempted Call Semantics**: The metrics evaluate all attempted tool selections. Failed tool selections are preserved and evaluated because a forbidden tool selection constitutes a policy violation regardless of runtime execution success.
+
+#### Metrics Implemented
+1.  **Required Tool Recall** (`evaluate_required_tool_recall`):
+    *   *Formula*: `unique required tools observed / unique required tools expected`
+    *   *Empty policy*: Returns `NOT_APPLICABLE` if required tool expectations are empty.
+    *   *Duplicates*: Duplicates do not increase recall.
+2.  **Allowed Tool Precision** (`evaluate_allowed_tool_precision`):
+    *   *Formula*: `unique observed tools in allowed set / unique observed tools`
+    *   *Allowed set*: Required tools union acceptable tools.
+    *   *Empty policy*: Returns `NOT_APPLICABLE` if no tools were invoked.
+3.  **Forbidden Tool Invocation Count** (`evaluate_forbidden_tool_invocation_count`):
+    *   *Rule*: Total count of forbidden tool invocations.
+    *   *Empty policy*: Returns `NOT_APPLICABLE` if forbidden set is empty.
+4.  **Forbidden Tool Compliance** (`evaluate_forbidden_tool_compliance`):
+    *   *Rule*: Binary safety compliance (1.0 if no forbidden tools invoked, else 0.0).
+    *   *Empty policy*: Returns `NOT_APPLICABLE` if forbidden set is empty.
+5.  **Unnecessary Tool Call Count** (`evaluate_unnecessary_tool_call_count`):
+    *   *Rule*: Total count of tool calls outside required/acceptable tools. Unknown tools are treated as unnecessary.
+    *   *Empty policy*: If required and acceptable contracts are empty, all observed calls are unnecessary.
+6.  **Duplicate Tool Call Count** (`evaluate_duplicate_tool_call_count`):
+    *   *Rule*: Total count of tool calls beyond the first invocation of each tool name.
+7.  **Tool Call Efficiency** (`evaluate_tool_call_efficiency`):
+    *   *Formula*: `unique required expected count / total actual tool calls` capped at 1.0.
+    *   *Empty policy*: Returns `0.0` if actual calls is zero and required floor is non-zero. Returns `NOT_APPLICABLE` if required floor is zero.
+    *   *Note*: Efficiency is an operational count-ratio indicator and does not measure correctness.
+8.  **Combined Tool Evaluator** (`evaluate_tool_selection`):
+    *   *Rule*: Runs all 7 metrics and returns a dictionary. Individual N/A statuses are preserved independently, and averages are not calculated.
+
+#### Targeted Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_tool_metrics.py -v`
+*   **Collected**: 11
+*   **Passed**: 11
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 0.27s
+
+#### Regression Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_evaluation_schemas.py tests/unit/test_deterministic_metrics.py tests/unit/test_rca_metrics.py tests/unit/test_tool_metrics.py -v`
+*   **Collected**: 77
+*   **Passed**: 77
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 0.43s
+
+#### Full Offline Suite Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest`
+*   **Collected**: 195
+*   **Passed**: 193
+*   **Failed**: 0
+*   **Skipped**: 2
+*   **Warnings**: 3
+*   **Execution Time**: 24.55s
 
 ---
 
@@ -205,4 +275,4 @@ Forbidden unsupported cause detection operates independently of correctness. An 
 ---
 
 ## Next Milestone
-*   **Milestone 4**: Tool-selection efficiency and precision metrics.
+*   **Milestone 5**: Offline evaluation runner supporting `mock-graph` and `offline-component` modes.

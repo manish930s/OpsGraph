@@ -35,3 +35,15 @@ from evals.rca_metrics import (
     evaluate_structured_rca,
     adapt_rca_decision_to_structured,
 )
+from evals.tool_metrics import (
+    normalize_tool_name,
+    extract_tool_names_from_trace,
+    evaluate_required_tool_recall,
+    evaluate_allowed_tool_precision,
+    evaluate_forbidden_tool_invocation_count,
+    evaluate_forbidden_tool_compliance,
+    evaluate_unnecessary_tool_call_count,
+    evaluate_duplicate_tool_call_count,
+    evaluate_tool_call_efficiency,
+    evaluate_tool_selection,
+)
