@@ -53,7 +53,7 @@ graph TD
 *   **Phase 6 — Deterministic Context Builder**: Latency budgeting and FlashRank re-ranking compilation. **[RELEASED]**
 *   **Phase 7 — Prompt Assembly & LLM Gateway**: Custom templates, input/output guards, and SDK gateways. **[RELEASED — v0.7.0]**
 *   **Phase 8 — Bounded LangGraph Orchestration**: Stateful SRE orchestration loop. **[RELEASED — v0.8.0]**
-*   **Phase 9 — Planned / Not Started**
+*   **Phase 9 — Bounded Evaluation Framework**: Typed schemas, deterministic metrics, sequential runner, dataset loader, report compiler, and benchmark execution engine. **[RELEASED — v0.9.0]**
 
 ---
 
@@ -132,11 +132,12 @@ Verify the workspace using the offline test suite. The default test suite is off
 ```powershell
 .\venv\Scripts\python.exe -m pytest
 ```
-*v0.8.0 Release Verification Baseline:*
-*   **Collected**: 118
-*   **Passed**: 116
+*v0.9.0 Release Verification Baseline:*
+*   **Collected**: 219
+*   **Passed**: 217
 *   **Failed**: 0
 *   **Skipped**: 2 (integration live provider smoke tests)
+*   **Warnings**: 3
 
 ### Run Orchestration Suite
 ```powershell
@@ -157,6 +158,7 @@ Verify the workspace using the offline test suite. The default test suite is off
 *   `app/services/guardrails/`: Input/Output validation facade rules.
 *   `app/services/orchestration/`: LangGraph StateGraph, nodes, and conditional edges.
 *   `app/tools/`: Telemetry connectors (metrics, logs, traces, topology, windowing).
+*   `evals/`: Phase 9 evaluation contracts, metrics, runner, report compiler, and benchmark execution engine.
 *   `prompts/`: Versioned RCA prompts and tool selection templates.
 *   `DATA/`: Sample incident data and grounding records.
 *   `DOCS/`: Release reports and historical migration documentation.
@@ -181,4 +183,5 @@ Verify the workspace using the offline test suite. The default test suite is off
 *   **Fallback Collection**: Embedding fallback requires separate local index population.
 *   **Token Budgeting**: Approximate budget enforcement uses word counts rather than model BPE tokenizers.
 *   **Metadata Gaps**: Token usage counts are not captured by custom provider adapters.
-*   **Production Readiness**: No public web API or GUI is implemented. Evaluation relies on command-line pytest execution.
+*   **Runtime Execution Instrumentation**: Bounded LangGraph node timings, sequence traversal logging, and critic trace logging must be instrumented in the runner/collector phase.
+*   **Production Readiness**: No public web API or GUI is implemented. Evaluation relies on python execution and static json reporting.
