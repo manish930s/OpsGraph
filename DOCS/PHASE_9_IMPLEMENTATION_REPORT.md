@@ -266,6 +266,83 @@ No fuzzy matching, aliases, or substring matches are performed.
 
 ---
 
+### Milestone 5 — Offline Evaluation Runner
+*   **Status**: Completed (2026-07-11)
+*   **Description**: Implemented the offline evaluation runner responsible for orchestrating the metrics implemented during Milestones 2–4.
+
+#### Files Added
+*   `evals/runner.py`: Deterministic evaluation runner implementing wrapper evaluation functions.
+*   `tests/unit/test_runner.py`: Unit tests for the evaluation runner.
+
+#### Files Modified
+*   `evals/__init__.py`: Exposed public runner functions in package exports.
+
+#### Runner Architecture
+*   **Sequential Execution**: Orchestrates evaluation sequentially (no parallelization) to preserve deterministic, reproducible ordering.
+*   **No Internal Metric Logic**: Coordinates existing metrics from `evals/deterministic_metrics.py`, `evals/rca_metrics.py`, and `evals/tool_metrics.py` without introducing new metric calculations.
+*   **Non-Mutating Context**: Extracted context (cited evidence, authoritative universe, observed evidence, terminal outcome, budgets, timings) is treated as read-only.
+
+#### supported Modes
+*   `MOCK_GRAPH`: Expects trace to be present. Missing traces trigger warnings and evaluate trace-dependent metrics as `NOT_APPLICABLE`.
+*   `OFFLINE_COMPONENT`: Supports components evaluation. Missing traces trigger warnings and evaluate trace-dependent metrics as `NOT_APPLICABLE`.
+*   *Note: `LIVE` mode is not implemented and remains future work.*
+
+#### Metric Execution Pipeline Order
+Evaluation executes metric functions in the following exact pipeline order:
+1.  Citation metrics (`Citation ID Validity`, `Invalid Citation Count`)
+2.  Evidence metrics (`Required Evidence Recall`, `Required Evidence Missing Count`)
+3.  Terminal outcome metrics (`Terminal Outcome Correctness`)
+4.  Budget metrics (`Iteration Budget Utilization`, `Tool Call Budget Utilization`, `Context Rebuild Budget Utilization`, `Budget Compliance`)
+5.  Secret leakage metrics (`Known Secret Leakage Detection`)
+6.  Structured RCA metrics (`Affected Service Correctness`, `Fault Category Correctness`, `Root-Cause Code Correctness`, `Forbidden Unsupported Cause Detection`, `Structured RCA Field Coverage`)
+7.  Tool metrics (`Required Tool Recall`, `Allowed Tool Precision`, `Forbidden Tool Invocation Count`, `Forbidden Tool Compliance`, `Unnecessary Tool Call Count`, `Duplicate Tool Call Count`, `Tool Call Efficiency`)
+
+#### Aggregation Rules
+*   Collects all `MetricResult` objects into a flat list under `ScenarioEvaluationResult.metrics`.
+*   Does not average scores, weight metrics, or calculate composite quality scores.
+*   Preserves individual `NOT_APPLICABLE` and `FAILED` metric statuses independently.
+
+#### Warning and Failure Handling
+*   **Warnings**: Non-fatal conditions (missing trace, missing timing records, missing tool trace, missing predicted RCA, missing golden labels) append warning strings to `ScenarioEvaluationResult.warnings` without failing the evaluation.
+*   **Failures**: Fatal conditions that prevent evaluation from proceeding (invalid scenario object, invalid trace object, unexpected metric exceptions) are captured, append descriptive errors to `ScenarioEvaluationResult.errors`, and keep evaluation results valid but empty of metrics.
+
+#### Manifest Generation
+*   **Pydantic schema**: `EvaluationRunManifest`
+*   **Populated fields**: timezone-aware started/finished timestamps, mode, scenario IDs, system platform, Python version, git commit hash (retrieved dynamically), LLM config, and graph budgets (read from active settings).
+*   **Secrets**: No API keys, credentials, or environment variables are inspected, scanned, or written to the manifest.
+
+#### Public API
+*   `evaluate_scenario(scenario: GoldenScenario, trace: EvaluationTrace | None, predicted_rca: Any, mode: EvaluationMode, run_id: str | None = None) -> ScenarioEvaluationResult`
+*   `evaluate_mock_graph(scenario: GoldenScenario, trace: EvaluationTrace | None, predicted_rca: Any, run_id: str | None = None) -> ScenarioEvaluationResult`
+*   `evaluate_offline_component(scenario: GoldenScenario, trace: EvaluationTrace | None, predicted_rca: Any, run_id: str | None = None) -> ScenarioEvaluationResult`
+
+#### Targeted Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_runner.py -v`
+*   **Collected**: 6
+*   **Passed**: 6
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 0.75s
+
+#### Regression Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_evaluation_schemas.py tests/unit/test_deterministic_metrics.py tests/unit/test_rca_metrics.py tests/unit/test_tool_metrics.py tests/unit/test_runner.py -v`
+*   **Collected**: 83
+*   **Passed**: 83
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 0.87s
+
+#### Full Offline Suite Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest`
+*   **Collected**: 201
+*   **Passed**: 199
+*   **Failed**: 0
+*   **Skipped**: 2
+*   **Warnings**: 3
+*   **Execution Time**: 26.10s
+
+---
+
 ## Known Limitations and Deferred Instrumentation
 *   Runtime node timings, sequence traversal logging, and critic trace logging must be instrumented in the runner/collector phase (Milestone 5/6).
 *   RAGAS and other semantic or model-assisted evaluation remain optional and deferred because Phase 9 currently prioritizes deterministic, reproducible evaluation contracts and metrics. Optional semantic evaluation may be integrated later without becoming a dependency of the core offline evaluation path.
@@ -275,4 +352,4 @@ No fuzzy matching, aliases, or substring matches are performed.
 ---
 
 ## Next Milestone
-*   **Milestone 5**: Offline evaluation runner supporting `mock-graph` and `offline-component` modes.
+*   **Milestone 6**: Dataset loader and test scenario definitions integration.
