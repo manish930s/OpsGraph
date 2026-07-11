@@ -19,6 +19,8 @@ from evals.schemas import (
     ErrorCategorySummary,
     EvaluationStatistics,
     DatasetEvaluationResult,
+    BenchmarkConfig,
+    BenchmarkResult,
 )
 from evals.deterministic_metrics import (
     evaluate_citation_id_validity,
@@ -69,4 +71,10 @@ from evals.report_compiler import (
 )
 from evals.export import (
     export_dataset_result_json,
+    export_benchmark_result_json,
+)
+from evals.benchmark import (
+    validate_benchmark,
+    run_dataset,
+    run_benchmark,
 )

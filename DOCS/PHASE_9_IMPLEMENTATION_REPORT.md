@@ -483,6 +483,80 @@ Structure includes:
 
 ---
 
+### Milestone 8 — Benchmark Execution Engine
+*   **Status**: Completed (2026-07-11)
+*   **Description**: Implemented the benchmark execution engine to run complete datasets of Golden Scenarios and compile and export reproducible benchmark JSON artifacts.
+
+#### Files Added
+*   `evals/benchmark.py`: Benchmark execution engine orchestrating loading, validation, sequential execution, compilation, and export.
+*   `tests/unit/test_benchmark.py`: Unit tests verifying the benchmark engine.
+
+#### Files Modified
+*   `evals/schemas.py`: Appended `BenchmarkConfig` and `BenchmarkResult` schemas.
+*   `evals/export.py`: Added `export_benchmark_result_json` helper to export benchmark results deterministically.
+*   `evals/__init__.py`: Exposed benchmark config, result, and runner functions.
+
+#### Benchmark pipeline Order
+Orchestrates execution sequentially:
+Dataset Loader -> Validation -> Scenario Evaluation -> Dataset Report Compilation -> JSON Export
+
+#### BenchmarkConfig Structure
+*   `benchmark_name` (str)
+*   `dataset_path` (str)
+*   `evaluation_mode` (`EvaluationMode`)
+*   `output_directory` (str)
+*   `export_json` (bool, default `True`)
+*   `fail_on_validation_errors` (bool, default `False`)
+
+#### BenchmarkResult Structure
+*   `benchmark_name` (str)
+*   `run_manifest` (`EvaluationRunManifest`)
+*   `dataset_summary` (`DatasetSummary`)
+*   `dataset_evaluation_result` (`DatasetEvaluationResult`)
+*   `execution_duration_sec` (float)
+*   `exported_artifact_paths` (list of str paths)
+*   `benchmark_status` (str, `"passed"` or `"failed"`)
+*   `warnings` (list of warning strings)
+*   `errors` (list of error strings)
+
+#### Error Handling Separation
+*   **Dataset loader errors**: Captured and prefixed as `"Dataset loader failed: ..."`
+*   **Validation errors**: Captured per scenario as `"Validation error for scenario SCN-XXX: ..."`
+*   **Runner/compiler failures**: Captured and prefixed as `"Evaluation runner or compiler failed: ..."`
+*   **Export errors**: Captured and prefixed as `"Export failed: ..."`
+
+#### Public API
+*   `validate_benchmark(config: BenchmarkConfig) -> DatasetSummary`
+*   `run_dataset(config: BenchmarkConfig, scenarios: Sequence[Any], dataset_summary: DatasetSummary | None = None, traces: dict[str, Any] | None = None, predicted_rcas: dict[str, Any] | None = None, run_id: str | None = None) -> DatasetEvaluationResult`
+*   `run_benchmark(config: BenchmarkConfig, traces: dict[str, Any] | None = None, predicted_rcas: dict[str, Any] | None = None) -> BenchmarkResult`
+
+#### Targeted Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_benchmark.py -v`
+*   **Collected**: 4
+*   **Passed**: 4
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 0.71s
+
+#### Regression Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_evaluation_schemas.py tests/unit/test_deterministic_metrics.py tests/unit/test_rca_metrics.py tests/unit/test_tool_metrics.py tests/unit/test_runner.py tests/unit/test_dataset_loader.py tests/unit/test_report_compiler.py tests/unit/test_benchmark.py -v`
+*   **Collected**: 100
+*   **Passed**: 100
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 1.83s
+
+#### Full Offline Suite Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest`
+*   **Collected**: 218
+*   **Passed**: 216
+*   **Failed**: 0
+*   **Skipped**: 2
+*   **Warnings**: 3
+*   **Execution Time**: 88.56s
+
+---
+
 ## Known Limitations and Deferred Instrumentation
 *   Runtime execution instrumentation (node timings, sequence traversal logging, and critic trace capture) remains future work. The current evaluation framework consumes existing traces but does not instrument runtime execution.
 *   RAGAS and other semantic or model-assisted evaluation remain optional and deferred because Phase 9 currently prioritizes deterministic, reproducible evaluation contracts and metrics. Optional semantic evaluation may be integrated later without becoming a dependency of the core offline evaluation path.
@@ -492,4 +566,4 @@ Structure includes:
 ---
 
 ## Next Milestone
-*   **Milestone 8**: Dashboard interface or HTML reporting.
+*   **Milestone 9**: Milestone 9 — Release Preparation, CI Integration, Documentation, HTML Reporting and v0.9.0

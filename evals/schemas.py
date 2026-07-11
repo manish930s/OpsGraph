@@ -330,3 +330,25 @@ class DatasetEvaluationResult(BaseModel):
     error_summary: dict[str, ErrorCategorySummary] = Field(default_factory=dict)
     evaluation_statistics: EvaluationStatistics
     overall_completion_status: str
+
+
+class BenchmarkConfig(BaseModel):
+    benchmark_name: str
+    dataset_path: str
+    evaluation_mode: EvaluationMode
+    output_directory: str
+    export_json: bool = True
+    fail_on_validation_errors: bool = False
+
+
+class BenchmarkResult(BaseModel):
+    schema_version: str = Field(default="1.0")
+    benchmark_name: str
+    run_manifest: EvaluationRunManifest
+    dataset_summary: DatasetSummary | None = None
+    dataset_evaluation_result: DatasetEvaluationResult | None = None
+    execution_duration_sec: float
+    exported_artifact_paths: list[str] = Field(default_factory=list)
+    benchmark_status: str
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
