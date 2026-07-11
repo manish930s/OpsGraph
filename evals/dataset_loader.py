@@ -2,17 +2,7 @@ import json
 from pathlib import Path
 from enum import Enum
 from typing import Any, Iterable, Sequence
-from pydantic import BaseModel, Field
-from evals.schemas import GoldenScenario
-
-
-class DatasetSummary(BaseModel):
-    total_scenarios: int
-    split_counts: dict[str, int] = Field(default_factory=dict)
-    ambiguity_counts: dict[str, int] = Field(default_factory=dict)
-    scenario_ids: list[str] = Field(default_factory=list)
-    validation_errors: dict[str, list[str]] = Field(default_factory=dict)
-    validation_warnings: dict[str, list[str]] = Field(default_factory=dict)
+from evals.schemas import GoldenScenario, DatasetSummary
 
 
 def discover_scenarios(base_dir: str | Path) -> list[Path]:

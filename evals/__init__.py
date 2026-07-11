@@ -13,6 +13,12 @@ from evals.schemas import (
     EvaluationRunManifest,
     MetricResult,
     ScenarioEvaluationResult,
+    DatasetSummary,
+    MetricSummary,
+    WarningCategorySummary,
+    ErrorCategorySummary,
+    EvaluationStatistics,
+    DatasetEvaluationResult,
 )
 from evals.deterministic_metrics import (
     evaluate_citation_id_validity,
@@ -53,9 +59,14 @@ from evals.runner import (
     evaluate_offline_component,
 )
 from evals.dataset_loader import (
-    DatasetSummary,
     discover_scenarios,
     load_scenario,
     load_dataset,
     validate_dataset,
+)
+from evals.report_compiler import (
+    compile_dataset_report,
+)
+from evals.export import (
+    export_dataset_result_json,
 )

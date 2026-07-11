@@ -418,13 +418,78 @@ Structure includes:
 
 ---
 
+### Milestone 7 — Dataset Evaluation Result Aggregation and Report Compiler
+*   **Status**: Completed (2026-07-11)
+*   **Description**: Implemented report compilation and results aggregation, converting individual scenario evaluation results into a single dataset-level `DatasetEvaluationResult` output as deterministic JSON.
+
+#### Files Added
+*   `evals/report_compiler.py`: Dataset level report compiler implementation.
+*   `evals/export.py`: Stable JSON serialization and file exporter.
+*   `tests/unit/test_report_compiler.py`: Unit tests for the report compiler and JSON export.
+
+#### Files Modified
+*   `evals/schemas.py`: Appended `DatasetSummary` (moved from dataset_loader), `MetricSummary`, `WarningCategorySummary`, `ErrorCategorySummary`, `EvaluationStatistics`, and `DatasetEvaluationResult` schemas.
+*   `evals/dataset_loader.py`: Removed duplicate `DatasetSummary` definition and imported it from schemas.
+*   `evals/__init__.py`: Exposed compiler, export helper, and all new schemas.
+
+#### DatasetEvaluationResult Structure
+*   `run_manifest`: `EvaluationRunManifest`
+*   `dataset_summary`: `DatasetSummary`
+*   `scenario_results`: list of `ScenarioEvaluationResult` objects (sorted by `scenario_id` ascending).
+*   `metric_summaries`: dictionary mapping metric name to `MetricSummary` objects (sorted by name ascending).
+*   `warning_summary`: dictionary mapping category name to `WarningCategorySummary` objects (sorted by category name ascending).
+*   `error_summary`: dictionary mapping category name to `ErrorCategorySummary` objects (sorted by category name ascending).
+*   `evaluation_statistics`: Pydantic object capturing total scenarios, evaluated, successful, partial, failed, and completion ratio.
+*   `overall_completion_status`: string indicator (`completed`, `failed`, or `partial`).
+
+#### Report Compiler Aggregation Rules
+*   **Metric Summaries**: Aggregates each metric independently. Computes total counts, SUCCESS count, NOT_APPLICABLE count, FAILED count, minimum, maximum, mean, and median values. It does not average different metric names together.
+*   **Warning Aggregation**: Groups warnings by standard categories (`missing_trace`, `missing_timing`, `missing_tool_trace`, `missing_rca`, `missing_labels`, `validation_warning`, `other_warning`). Details count and affected scenarios.
+*   **Error Aggregation**: Groups errors by categories (`validation_errors`, `unexpected_exceptions`, `evaluation_failures`). Details count and affected scenarios.
+*   **Completion Statistics**: Reports scenario outcomes. A scenario evaluation is successful if it finishes with no errors. It is partial if it finished with both errors and metrics. It is failed if it has errors and zero metrics.
+
+#### Public API
+*   `compile_dataset_report(run_manifest: EvaluationRunManifest, scenario_results: Sequence[ScenarioEvaluationResult], dataset_summary: DatasetSummary | None = None) -> DatasetEvaluationResult`
+*   `export_dataset_result_json(result: DatasetEvaluationResult, output_path: str | Path) -> None`
+
+#### Export and Serialization Guarantees
+*   Uses `export_dataset_result_json` to dump the compiled dataset evaluation result into a deterministic JSON string.
+*   Employs sorting of JSON keys (`sort_keys=True`) and standard 2-space indentation formatting, providing OS-independent output.
+
+#### Targeted Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_report_compiler.py -v`
+*   **Collected**: 5
+*   **Passed**: 5
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 0.23s
+
+#### Regression Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_evaluation_schemas.py tests/unit/test_deterministic_metrics.py tests/unit/test_rca_metrics.py tests/unit/test_tool_metrics.py tests/unit/test_runner.py tests/unit/test_dataset_loader.py tests/unit/test_report_compiler.py -v`
+*   **Collected**: 96
+*   **Passed**: 96
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 1.49s
+
+#### Full Offline Suite Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest`
+*   **Collected**: 214
+*   **Passed**: 212
+*   **Failed**: 0
+*   **Skipped**: 2
+*   **Warnings**: 3
+*   **Execution Time**: 26.50s
+
+---
+
 ## Known Limitations and Deferred Instrumentation
-*   Runtime node timings, sequence traversal logging, and critic trace logging must be instrumented in the runner/collector phase (Milestone 5/6).
+*   Runtime execution instrumentation (node timings, sequence traversal logging, and critic trace capture) remains future work. The current evaluation framework consumes existing traces but does not instrument runtime execution.
 *   RAGAS and other semantic or model-assisted evaluation remain optional and deferred because Phase 9 currently prioritizes deterministic, reproducible evaluation contracts and metrics. Optional semantic evaluation may be integrated later without becoming a dependency of the core offline evaluation path.
-*   Runtime secret safety scanning of arbitrary metadata is deferred to later safety milestones.
+*   Runtime secret safety scanning of arbitrary nested metadata is deferred to later safety milestones.
 *   No v0.9.0 release has been created.
 
 ---
 
 ## Next Milestone
-*   **Milestone 7**: Evaluation report compiler and structured schema metrics aggregator.
+*   **Milestone 8**: Dashboard interface or HTML reporting.

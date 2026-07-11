@@ -278,3 +278,55 @@ class ScenarioEvaluationResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
     trace: EvaluationTrace | None = None
+
+
+class DatasetSummary(BaseModel):
+    total_scenarios: int
+    split_counts: dict[str, int] = Field(default_factory=dict)
+    ambiguity_counts: dict[str, int] = Field(default_factory=dict)
+    scenario_ids: list[str] = Field(default_factory=list)
+    validation_errors: dict[str, list[str]] = Field(default_factory=dict)
+    validation_warnings: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class MetricSummary(BaseModel):
+    metric_name: str
+    total_count: int
+    success_count: int
+    na_count: int
+    failed_count: int
+    min_value: float | None = None
+    max_value: float | None = None
+    mean_value: float | None = None
+    median_value: float | None = None
+
+
+class WarningCategorySummary(BaseModel):
+    count: int
+    affected_scenarios: list[str] = Field(default_factory=list)
+
+
+class ErrorCategorySummary(BaseModel):
+    count: int
+    affected_scenarios: list[str] = Field(default_factory=list)
+
+
+class EvaluationStatistics(BaseModel):
+    total_scenarios: int
+    evaluated_scenarios: int
+    successful_evaluations: int
+    partial_evaluations: int
+    failed_evaluations: int
+    completion_ratio: float
+
+
+class DatasetEvaluationResult(BaseModel):
+    schema_version: str = Field(default="1.0")
+    run_manifest: EvaluationRunManifest
+    dataset_summary: DatasetSummary | None = None
+    scenario_results: list[ScenarioEvaluationResult] = Field(default_factory=list)
+    metric_summaries: dict[str, MetricSummary] = Field(default_factory=dict)
+    warning_summary: dict[str, WarningCategorySummary] = Field(default_factory=dict)
+    error_summary: dict[str, ErrorCategorySummary] = Field(default_factory=dict)
+    evaluation_statistics: EvaluationStatistics
+    overall_completion_status: str
