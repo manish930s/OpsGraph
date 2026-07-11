@@ -282,7 +282,7 @@ No fuzzy matching, aliases, or substring matches are performed.
 *   **No Internal Metric Logic**: Coordinates existing metrics from `evals/deterministic_metrics.py`, `evals/rca_metrics.py`, and `evals/tool_metrics.py` without introducing new metric calculations.
 *   **Non-Mutating Context**: Extracted context (cited evidence, authoritative universe, observed evidence, terminal outcome, budgets, timings) is treated as read-only.
 
-#### supported Modes
+#### Supported Modes
 *   `MOCK_GRAPH`: Expects trace to be present. Missing traces trigger warnings and evaluate trace-dependent metrics as `NOT_APPLICABLE`.
 *   `OFFLINE_COMPONENT`: Supports components evaluation. Missing traces trigger warnings and evaluate trace-dependent metrics as `NOT_APPLICABLE`.
 *   *Note: `LIVE` mode is not implemented and remains future work.*
@@ -292,10 +292,10 @@ Evaluation executes metric functions in the following exact pipeline order:
 1.  Citation metrics (`Citation ID Validity`, `Invalid Citation Count`)
 2.  Evidence metrics (`Required Evidence Recall`, `Required Evidence Missing Count`)
 3.  Terminal outcome metrics (`Terminal Outcome Correctness`)
-4.  Budget metrics (`Iteration Budget Utilization`, `Tool Call Budget Utilization`, `Context Rebuild Budget Utilization`, `Budget Compliance`)
+4.  Budget metrics (`Iteration/Tool/Context Budget Utilization`, `Budget Compliance`)
 5.  Secret leakage metrics (`Known Secret Leakage Detection`)
-6.  Structured RCA metrics (`Affected Service Correctness`, `Fault Category Correctness`, `Root-Cause Code Correctness`, `Forbidden Unsupported Cause Detection`, `Structured RCA Field Coverage`)
-7.  Tool metrics (`Required Tool Recall`, `Allowed Tool Precision`, `Forbidden Tool Invocation Count`, `Forbidden Tool Compliance`, `Unnecessary Tool Call Count`, `Duplicate Tool Call Count`, `Tool Call Efficiency`)
+6.  Structured RCA metrics (`Affected Service/Fault Category/Root-Cause Code Correctness`, `Forbidden Unsupported Cause Detection`, `Structured RCA Field Coverage`)
+7.  Tool metrics (`Required Recall`, `Allowed Precision`, `Forbidden Invocation Count`, `Forbidden Compliance`, `Unnecessary Count`, `Duplicate Count`, `Tool Call Efficiency`)
 
 #### Aggregation Rules
 *   Collects all `MetricResult` objects into a flat list under `ScenarioEvaluationResult.metrics`.
@@ -343,6 +343,81 @@ Evaluation executes metric functions in the following exact pipeline order:
 
 ---
 
+### Milestone 6 — Dataset Loader and Golden Scenario Integration
+*   **Status**: Completed (2026-07-11)
+*   **Description**: Implemented deterministic dataset loading, validation, and runner integration supporting complete datasets of Golden Scenarios.
+
+#### Files Added
+*   `evals/dataset_loader.py`: Dataset loader and validation logic.
+*   `tests/unit/test_dataset_loader.py`: Unit tests for the dataset loader.
+
+#### Files Modified
+*   `evals/__init__.py`: Exposed dataset loader functions in package exports.
+*   `evals/runner.py`: Extended all runner wrappers to accept either a single scenario or an iterable dataset of scenarios, mapping traces/inputs scenario-by-scenario.
+
+#### Dataset Directory Structure
+*   **Directory Format**: Directories containing `golden.json` and optionally `evidence.json`.
+*   **Standalone Format**: Standalone JSON files describing a scenario.
+*   **Discovered paths**: Sorted deterministically by name, and final datasets are sorted ascending by `scenario_id`.
+
+#### Compatibility Mapping
+*   Automatically maps legacy schema fields (like `expected_tools` to `required_tools` and `ground_truth` to `labels`).
+*   Applies fallback defaults (e.g. `split: "dev"`, `ambiguity: "unambiguous"`, `expected_terminal_outcome: "finalize_rca"`, `acceptable_terminal_outcomes: ["finalize_rca"]`) for missing fields.
+
+#### Validation Strategy
+*   Checks for missing required fields (`scenario_id`, `incident_id`).
+*   Runs strict Pydantic validation against `GoldenScenario` schema.
+*   Validates scenario references by matching all required evidence IDs against actual entries in `evidence.json`.
+*   Detects duplicate scenario IDs across the entire dataset.
+*   Collects all validation errors/warnings continuously across all items without short-circuiting on the first error.
+
+#### DatasetSummary
+Structure includes:
+*   `total_scenarios` (integer)
+*   `split_counts` (dictionary of split counts)
+*   `ambiguity_counts` (dictionary of ambiguity counts)
+*   `scenario_ids` (sorted list of scenario IDs)
+*   `validation_errors` (scenario ID -> list of error strings)
+*   `validation_warnings` (scenario ID -> list of warning strings)
+
+#### Public API
+*   `discover_scenarios(base_dir: str | Path) -> list[Path]`
+*   `load_scenario(path: str | Path) -> tuple[GoldenScenario | None, list[str], list[str]]`
+*   `load_dataset(base_dir: str | Path) -> tuple[list[GoldenScenario], DatasetSummary]`
+*   `validate_dataset(base_dir: str | Path) -> DatasetSummary`
+
+#### Runner Integration
+*   `evaluate_scenario`, `evaluate_mock_graph`, and `evaluate_offline_component` check the `scenario` type.
+*   If passed an iterable (excluding string/dict/BaseModel), they run evaluations sequentially and return a `list[ScenarioEvaluationResult]`.
+*   Trace and predicted RCA parameters can be passed as dictionaries keyed by scenario ID for matching, maintaining full backward compatibility.
+
+#### Targeted Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_dataset_loader.py -v`
+*   **Collected**: 8
+*   **Passed**: 8
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 0.70s
+
+#### Regression Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_evaluation_schemas.py tests/unit/test_deterministic_metrics.py tests/unit/test_rca_metrics.py tests/unit/test_tool_metrics.py tests/unit/test_runner.py tests/unit/test_dataset_loader.py -v`
+*   **Collected**: 91
+*   **Passed**: 91
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 1.34s
+
+#### Full Offline Suite Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest`
+*   **Collected**: 209
+*   **Passed**: 207
+*   **Failed**: 0
+*   **Skipped**: 2
+*   **Warnings**: 3
+*   **Execution Time**: 25.32s
+
+---
+
 ## Known Limitations and Deferred Instrumentation
 *   Runtime node timings, sequence traversal logging, and critic trace logging must be instrumented in the runner/collector phase (Milestone 5/6).
 *   RAGAS and other semantic or model-assisted evaluation remain optional and deferred because Phase 9 currently prioritizes deterministic, reproducible evaluation contracts and metrics. Optional semantic evaluation may be integrated later without becoming a dependency of the core offline evaluation path.
@@ -352,4 +427,4 @@ Evaluation executes metric functions in the following exact pipeline order:
 ---
 
 ## Next Milestone
-*   **Milestone 6**: Dataset loader and test scenario definitions integration.
+*   **Milestone 7**: Evaluation report compiler and structured schema metrics aggregator.

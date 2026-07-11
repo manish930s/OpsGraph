@@ -58,16 +58,43 @@ def get_git_commit() -> str | None:
 
 
 def evaluate_scenario(
-    scenario: GoldenScenario,
-    trace: EvaluationTrace | None,
-    predicted_rca: Any,
-    mode: EvaluationMode,
+    scenario: GoldenScenario | Sequence[GoldenScenario] | Iterable[GoldenScenario],
+    trace: EvaluationTrace | None | dict[str, EvaluationTrace | None] = None,
+    predicted_rca: Any = None,
+    mode: EvaluationMode = EvaluationMode.MOCK_GRAPH,
     run_id: str | None = None
-) -> ScenarioEvaluationResult:
+) -> ScenarioEvaluationResult | list[ScenarioEvaluationResult]:
     """
-    Orchestrates the evaluation of a single scenario using deterministic metrics.
+    Orchestrates the evaluation of a single scenario or an iterable of scenarios using deterministic metrics.
     Sequential execution ensures reproducibility and strict metric isolation.
     """
+    from collections.abc import Iterable
+    from pydantic import BaseModel
+    if isinstance(scenario, Iterable) and not isinstance(scenario, (str, dict, BaseModel)):
+        results = []
+        actual_run_id = run_id or str(uuid.uuid4())
+        for scn in scenario:
+            t = None
+            if isinstance(trace, dict):
+                t = trace.get(scn.scenario_id)
+            elif trace is not None and not isinstance(trace, dict):
+                t = trace
+
+            pr = None
+            if isinstance(predicted_rca, dict) and scn.scenario_id in predicted_rca:
+                pr = predicted_rca[scn.scenario_id]
+            else:
+                pr = predicted_rca
+
+            results.append(evaluate_scenario(
+                scenario=scn,
+                trace=t,
+                predicted_rca=pr,
+                mode=mode,
+                run_id=actual_run_id
+            ))
+        return results
+
     started_at = datetime.now(timezone.utc)
     errors = []
     warnings = []
@@ -368,11 +395,11 @@ def evaluate_scenario(
 
 
 def evaluate_mock_graph(
-    scenario: GoldenScenario,
-    trace: EvaluationTrace | None,
-    predicted_rca: Any,
+    scenario: GoldenScenario | Sequence[GoldenScenario] | Iterable[GoldenScenario],
+    trace: EvaluationTrace | None | dict[str, EvaluationTrace | None] = None,
+    predicted_rca: Any = None,
     run_id: str | None = None
-) -> ScenarioEvaluationResult:
+) -> ScenarioEvaluationResult | list[ScenarioEvaluationResult]:
     """
     Evaluates scenario execution in mock graph mode.
     """
@@ -386,11 +413,11 @@ def evaluate_mock_graph(
 
 
 def evaluate_offline_component(
-    scenario: GoldenScenario,
-    trace: EvaluationTrace | None,
-    predicted_rca: Any,
+    scenario: GoldenScenario | Sequence[GoldenScenario] | Iterable[GoldenScenario],
+    trace: EvaluationTrace | None | dict[str, EvaluationTrace | None] = None,
+    predicted_rca: Any = None,
     run_id: str | None = None
-) -> ScenarioEvaluationResult:
+) -> ScenarioEvaluationResult | list[ScenarioEvaluationResult]:
     """
     Evaluates scenario execution in offline component mode.
     """
