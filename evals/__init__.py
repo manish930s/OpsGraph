@@ -26,3 +26,12 @@ from evals.deterministic_metrics import (
     evaluate_budget_compliance,
     evaluate_known_secret_leakage,
 )
+from evals.rca_metrics import (
+    evaluate_affected_service_correctness,
+    evaluate_fault_category_correctness,
+    evaluate_root_cause_code_correctness,
+    evaluate_forbidden_unsupported_cause_detection,
+    evaluate_structured_rca_field_coverage,
+    evaluate_structured_rca,
+    adapt_rca_decision_to_structured,
+)

@@ -110,13 +110,85 @@
 
 ---
 
+### Milestone 3 — Structured RCA Matching Metrics
+*   **Status**: Completed (2026-07-11)
+*   **Description**: Implemented pure, offline-capable structured RCA matching metrics to evaluate RCA outputs against scenario golden labels.
+
+#### Files Added
+*   `evals/rca_metrics.py`: Structured RCA matching metrics implementations.
+*   `tests/unit/test_rca_metrics.py`: Dedicated unit tests for the structured RCA metrics.
+
+#### Files Modified
+*   `evals/__init__.py`: Exposed structured RCA metrics and helper in package exports.
+
+#### Normalization Policy
+Identifiers (affected service, fault category, root-cause code) are normalized as follows:
+1.  Trim leading/trailing whitespace.
+2.  Convert to lowercase (case-insensitive comparison).
+3.  Punctuation and separators (underscores, dashes) are preserved.
+No fuzzy matching, token overlaps, or substring matching is performed.
+
+#### Metrics Implemented
+1.  **Affected Service Correctness** (`evaluate_affected_service_correctness`):
+    *   *Rule*: Returns `1.0` if normalized prediction matches normalized golden affected service.
+    *   *Empty policy*: Returns `NOT_APPLICABLE` if golden label has no affected service defined.
+    *   *Missing prediction policy*: Returns `0.0` with `prediction_missing: True` in metadata.
+2.  **Fault Category Correctness** (`evaluate_fault_category_correctness`):
+    *   *Rule*: Compare predicted fault category against golden category.
+    *   *Empty policy*: Returns `NOT_APPLICABLE` if golden label is empty.
+    *   *Missing prediction policy*: Returns `0.0` with `prediction_missing: True`.
+3.  **Root-Cause Code Correctness** (`evaluate_root_cause_code_correctness`):
+    *   *Rule*: Returns `1.0` if normalized prediction equals golden root-cause code or matches an acceptable equivalent code. Otherwise `0.0`.
+    *   *Empty policy*: Returns `NOT_APPLICABLE` if expected code is not defined.
+    *   *Missing prediction policy*: Returns `0.0` with `prediction_missing: True`.
+    *   *Equivalent codes*: Uses scenario-specific `acceptable_equivalent_root_cause_codes` mapping. No global taxonomy graph is used.
+4.  **Forbidden Unsupported Cause Detection** (`evaluate_forbidden_unsupported_cause_detection`):
+    *   *Rule*: Returns `0.0` if predicted root-cause code is in the forbidden set, otherwise `1.0`.
+    *   *Empty policy*: Returns `NOT_APPLICABLE` if forbidden set is empty.
+    *   *Missing prediction policy*: Returns `1.0` with `prediction_missing: True` (no forbidden code emitted).
+5.  **Structured RCA Field Coverage** (`evaluate_structured_rca_field_coverage`):
+    *   *Formula*: `number of expected fields with non-empty predictions / number of fields expected in golden`
+    *   *Rule*: Computes completeness across `affected_service`, `fault_category`, and `root_cause_code`. Does not evaluate summaries or free text.
+    *   *Empty policy*: Returns `NOT_APPLICABLE` if no golden structured fields are expected.
+6.  **Combined RCA Evaluator** (`evaluate_structured_rca`):
+    *   *Rule*: Runs all 5 metrics and returns a dictionary of results. Aggregations (like averages or quality scores) are intentionally avoided.
+7.  **RCA Input Adapter** (`adapt_rca_decision_to_structured`):
+    *   *Rule*: Safely maps dictionary or Pydantic structures to structured rca inputs. Does not infer structured keys from natural language text.
+
+#### Targeted Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_rca_metrics.py -v`
+*   **Collected**: 7
+*   **Passed**: 7
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 0.23s
+
+#### Regression Test Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest tests/unit/test_evaluation_schemas.py tests/unit/test_deterministic_metrics.py -v`
+*   **Collected**: 54
+*   **Passed**: 54
+*   **Failed**: 0
+*   **Warnings**: 0
+*   **Execution Time**: 0.31s
+
+#### Full Offline Suite Results
+*   **Command**: `.\venv\Scripts\python.exe -m pytest`
+*   **Collected**: 179
+*   **Passed**: 177
+*   **Failed**: 0
+*   **Skipped**: 2
+*   **Warnings**: 3
+*   **Execution Time**: 29.05s
+
+---
+
 ## Known Limitations and Deferred Instrumentation
 *   Runtime node timings, sequence traversal logging, and critic trace logging must be instrumented in the runner/collector phase (Milestone 5/6).
-*   Ragas integration remains deferred due to lack of environment installation support.
+*   RAGAS and other semantic or model-assisted evaluation remain optional and deferred because Phase 9 currently prioritizes deterministic, reproducible evaluation contracts and metrics. Optional semantic evaluation may be integrated later without becoming a dependency of the core offline evaluation path.
 *   Runtime secret safety scanning of arbitrary metadata is deferred to later safety milestones.
 *   No v0.9.0 release has been created.
 
 ---
 
 ## Next Milestone
-*   **Milestone 3**: Structured RCA matching metrics (Affected Service, Fault Category, Root-Cause Code, acceptable equivalent codes, and custom mapping definitions).
+*   **Milestone 4**: Tool-selection efficiency and precision metrics.
