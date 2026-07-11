@@ -183,5 +183,5 @@ Verify the workspace using the offline test suite. The default test suite is off
 *   **Fallback Collection**: Embedding fallback requires separate local index population.
 *   **Token Budgeting**: Approximate budget enforcement uses word counts rather than model BPE tokenizers.
 *   **Metadata Gaps**: Token usage counts are not captured by custom provider adapters.
-*   **Runtime Execution Instrumentation**: Bounded LangGraph node timings, sequence traversal logging, and critic trace logging must be instrumented in the runner/collector phase.
+*   **Runtime Execution Instrumentation**: Detailed runtime instrumentation (node timings, graph traversal traces, and critic execution traces) remains future work. The evaluation framework consumes existing execution traces but does not instrument runtime execution automatically.
 *   **Production Readiness**: No public web API or GUI is implemented. Evaluation relies on python execution and static json reporting.

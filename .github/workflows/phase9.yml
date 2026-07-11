@@ -32,4 +32,4 @@ jobs:
 
       - name: Run Pytest Suite
         run: |
-          python -m pytest tests/unit/ -v
+          python -m pytest

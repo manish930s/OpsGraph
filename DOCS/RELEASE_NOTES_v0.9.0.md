@@ -74,7 +74,7 @@ A coordinate facade executing the entire loader -> validation -> runner -> compi
 
 ## 5. Known Limitations
 
-*   **Runtime Execution Instrumentation**: Bounded LangGraph node timings, sequence traversal logging, and critic trace logging must be instrumented in the runner/collector phase.
+*   **Runtime Execution Instrumentation**: Detailed runtime instrumentation (node timings, graph traversal traces, and critic execution traces) remains future work. The evaluation framework consumes existing execution traces but does not instrument runtime execution automatically.
 *   **NeMo Guardrails**: Deferred due to local environment and python version constraints.
 *   **Production Readiness**: Execution relies on command-line execution and static JSON exports.
 

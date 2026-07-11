@@ -561,9 +561,9 @@ Dataset Loader -> Validation -> Scenario Evaluation -> Dataset Report Compilatio
 *   Runtime execution instrumentation (node timings, sequence traversal logging, and critic trace capture) remains future work. The current evaluation framework consumes existing traces but does not instrument runtime execution.
 *   RAGAS and other semantic or model-assisted evaluation remain optional and deferred because Phase 9 currently prioritizes deterministic, reproducible evaluation contracts and metrics. Optional semantic evaluation may be integrated later without becoming a dependency of the core offline evaluation path.
 *   Runtime secret safety scanning of arbitrary nested metadata is deferred to later safety milestones.
-*   No v0.9.0 release has been created.
+*   No v0.9.0 release blockers remain.
 
 ---
 
-## Next Milestone
-*   **Milestone 9**: Milestone 9 — Release Preparation, CI Integration, Documentation, HTML Reporting and v0.9.0
+## Next Phase
+*   **Phase 10**: Bounded Evaluation Instrumentation and live collector hooks.
